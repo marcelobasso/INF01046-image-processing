@@ -12,11 +12,14 @@ void save_image(GtkWidget *button, GtkImage *image);
 // Declare the function to handle the tones button click
 void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry);
 
+void on_copy_clicked(GtkWidget *button, GtkImage *image);
+
 // Variable to store the loaded image filename (for saving later)
 char *current_image_filename = NULL;
+GtkWidget *image, *cp_image;
 
 // Function to create the control window with "Open Image", "Save Image" buttons, and "Tones" input field
-void create_control_window(GtkImage *image) {
+void create_control_window(GtkImage *image, GtkImage *cp_image) {
     // Create a new window for controls
     GtkWidget *control_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(control_window), "Control Window");
@@ -29,14 +32,14 @@ void create_control_window(GtkImage *image) {
 
     // Open Image
     GtkWidget *open_button = gtk_button_new_with_label("Open Image");
-    gtk_box_pack_start(GTK_BOX(vbox), open_button, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), open_button, TRUE, TRUE, 3);
 
     // save the image
     GtkWidget *save_button = gtk_button_new_with_label("Save Image");
     gtk_box_pack_start(GTK_BOX(vbox), save_button, TRUE, TRUE, 0);
 
     // Brings image to the editting window
-    GtkWidget *copy = gtk_button_new_with_label("Copy");
+    GtkWidget *copy = gtk_button_new_with_label("Copy Image");
     gtk_box_pack_start(GTK_BOX(vbox), copy, TRUE, TRUE, 0);
 
     // Mirror vertical
@@ -47,8 +50,11 @@ void create_control_window(GtkImage *image) {
     GtkWidget *horizontal_mirror = gtk_button_new_with_label("Horizontal mirror");
     gtk_box_pack_start(GTK_BOX(vbox), horizontal_mirror, TRUE, TRUE, 0);
 
+    GtkWidget *grayscale = gtk_button_new_with_label("Grayscale");
+    gtk_box_pack_start(GTK_BOX(vbox), grayscale, TRUE, TRUE, 0);
+
     // Create a horizontal box container for tones input and button
-    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
     // Create a text field (entry) for quantization
@@ -63,7 +69,9 @@ void create_control_window(GtkImage *image) {
     // Connect the buttons to their respective functions
     g_signal_connect(open_button, "clicked", G_CALLBACK(open_image), image);
     g_signal_connect(save_button, "clicked", G_CALLBACK(save_image), image);
-    g_signal_connect(quantize_button, "clicked", G_CALLBACK(on_quantize_button_clicked), GTK_ENTRY(quantize_button));
+    g_signal_connect(quantize_button, "clicked", G_CALLBACK(on_quantize_button_clicked), GTK_ENTRY(quantize));
+    g_signal_connect(copy, "clicked", G_CALLBACK(on_copy_clicked), image);
+
 
     // Connect the destroy signal to close the application
     g_signal_connect(control_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
@@ -126,11 +134,11 @@ void save_image(GtkWidget *button, GtkImage *image) {
     // Create a file chooser dialog for saving the file
     GtkWidget *dialog;
     dialog = gtk_file_chooser_dialog_new("Save Image",
-                                         NULL,
-                                         GTK_FILE_CHOOSER_ACTION_SAVE,
-                                         ("_Cancel"), GTK_RESPONSE_CANCEL,
-                                         ("_Save"), GTK_RESPONSE_ACCEPT,
-                                         NULL);
+        NULL,
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        ("_Cancel"), GTK_RESPONSE_CANCEL,
+        ("_Save"), GTK_RESPONSE_ACCEPT,
+        NULL);
 
     // Set a default filename for the save dialog with .jpg extension
     gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), "untitled.jpg");
@@ -154,6 +162,11 @@ void save_image(GtkWidget *button, GtkImage *image) {
     gtk_widget_destroy(dialog);
 }
 
+void on_copy_clicked(GtkWidget *button, GtkImage *image) {
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(image);
+    gtk_image_set_from_pixbuf(GTK_IMAGE(cp_image), pixbuf);
+}
+
 // Function to handle the tones button click
 void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry) {
     // Retrieve the text (tones) from the entry
@@ -171,22 +184,33 @@ int main(int argc, char *argv[]) {
 
     // Create the main window to display the image
     GtkWidget *image_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(image_window), "Image Viewer");
-    gtk_window_set_default_size(GTK_WINDOW(image_window), 800, 600);
+    gtk_window_set_title(GTK_WINDOW(image_window), "Original Image");
+    gtk_window_set_default_size(GTK_WINDOW(image_window), 400, 300);
     gtk_window_set_position(GTK_WINDOW(image_window), GTK_WIN_POS_CENTER);
 
+    // Create second window for editting
+    GtkWidget *work_image_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(work_image_window), "Work Image");
+    gtk_window_set_default_size(GTK_WINDOW(work_image_window), 400, 300);
+    gtk_window_set_position(GTK_WINDOW(work_image_window), GTK_WIN_POS_CENTER);
+
     // Create an image widget and add it to the image window
-    GtkWidget *image = gtk_image_new();
+    image = gtk_image_new();
     gtk_container_add(GTK_CONTAINER(image_window), image);
+    cp_image = gtk_image_new();
+    gtk_container_add(GTK_CONTAINER(work_image_window), cp_image);
 
     // Connect the destroy signal to close the application
     g_signal_connect(image_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    g_signal_connect(work_image_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+
 
     // Show the image window (this will show up without an image initially)
     gtk_widget_show_all(image_window);
+    gtk_widget_show_all(work_image_window);
 
-    // Create the control window which contains the "Open Image", "Save Image" buttons, and "Tones" input
-    create_control_window(GTK_IMAGE(image));
+    // Create the control window 
+    create_control_window(GTK_IMAGE(image), GTK_IMAGE(cp_image));
 
     // Start the GTK main loop
     gtk_main();
