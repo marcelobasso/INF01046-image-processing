@@ -2,15 +2,15 @@
 
 ## Objetivos
 
-a) Ler e gravar arquivos de imagens;
-b) Exibir o conteúdo de um arquivo de imagem;
+a) Ler e gravar arquivos de imagens; OK
+b) Exibir o conteúdo de um arquivo de imagem; OK 
 c) Converter uma imagem colorida em uma imagem em tons de cinza;
 d) Aplicar um esquema simples para quantização de imagens;
-e) Utilizar uma biblioteca para gerenciar serviços de janela. 
+e) Utilizar uma biblioteca para gerenciar serviços de janela.
 
 ## Etapas
 
-Parte I – Leitura e Gravação de Arquivos de Imagens (20 pontos)
+Parte I – Leitura e Gravação de Arquivos de Imagens (20 pontos) OK
 Parte II – Leitura, Exibição e Operações sobre Imagens (80 pontos)
 
 ## Avaliação da parte II

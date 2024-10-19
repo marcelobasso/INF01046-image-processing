@@ -14,9 +14,13 @@ void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry);
 
 void on_copy_clicked(GtkWidget *button, GtkImage *image);
 
+void on_vertical_mirror_clicked(GtkWidget *button, GtkImage *image);
+
+void on_horizontal_mirror_clicked(GtkWidget *button, GtkImage *image);
+
 // Variable to store the loaded image filename (for saving later)
 char *current_image_filename = NULL;
-GtkWidget *image, *cp_image;
+GtkWidget *original_image, *cp_image;
 
 // Function to create the control window with "Open Image", "Save Image" buttons, and "Tones" input field
 void create_control_window(GtkImage *image, GtkImage *cp_image) {
@@ -71,6 +75,8 @@ void create_control_window(GtkImage *image, GtkImage *cp_image) {
     g_signal_connect(save_button, "clicked", G_CALLBACK(save_image), image);
     g_signal_connect(quantize_button, "clicked", G_CALLBACK(on_quantize_button_clicked), GTK_ENTRY(quantize));
     g_signal_connect(copy, "clicked", G_CALLBACK(on_copy_clicked), image);
+    g_signal_connect(vertical_mirror, "clicked", G_CALLBACK(on_vertical_mirror_clicked), image);
+    g_signal_connect(horizontal_mirror, "clicked", G_CALLBACK(on_horizontal_mirror_clicked), image);
 
 
     // Connect the destroy signal to close the application
@@ -109,7 +115,7 @@ void open_image(GtkWidget *button, GtkImage *image) {
         current_image_filename = gtk_file_chooser_get_filename(chooser);
 
         // Set the image to the selected file
-        gtk_image_set_from_file(image, current_image_filename);
+        gtk_image_set_from_file(GTK_IMAGE(original_image), current_image_filename);
     }
 
     // Close the dialog after selection
@@ -125,7 +131,7 @@ void save_image(GtkWidget *button, GtkImage *image) {
     }
 
     // Get the pixbuf from the image widget
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(image);
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(cp_image));
     if (!pixbuf) {
         std::cerr << "No image to save!" << std::endl;
         return;
@@ -140,32 +146,93 @@ void save_image(GtkWidget *button, GtkImage *image) {
         ("_Save"), GTK_RESPONSE_ACCEPT,
         NULL);
 
-    // Set a default filename for the save dialog with .jpg extension
     gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), "untitled.jpg");
 
-    // Run the dialog and check if the user selected a location
+    // Select image
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         char *save_filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
 
-        // Save the pixbuf (image) to the selected file in JPEG format
+        // Save the pixbuf (image) in JPEG format
         if (!gdk_pixbuf_save(pixbuf, save_filename, "jpeg", NULL, "quality", "100", NULL)) {
             std::cerr << "Failed to save image!" << std::endl;
         } else {
             std::cout << "Image saved successfully as JPEG to " << save_filename << std::endl;
         }
 
-        // Free the saved filename
         g_free(save_filename);
     }
 
-    // Close the dialog after saving
     gtk_widget_destroy(dialog);
 }
 
 void on_copy_clicked(GtkWidget *button, GtkImage *image) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(image);
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(original_image));
     gtk_image_set_from_pixbuf(GTK_IMAGE(cp_image), pixbuf);
 }
+
+void on_vertical_mirror_clicked(GtkWidget *button, GtkImage *image) {
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(cp_image));
+    int width = gdk_pixbuf_get_width(pixbuf);
+    int height = gdk_pixbuf_get_height(pixbuf);
+    // number of bytes per row in the image data
+    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
+    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
+    guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
+
+    // Temporary buffer to store a row
+    guchar *temp_row = (guchar *) malloc(rowstride);
+
+    for (int y = 0; y < height / 2; ++y) {
+        guchar *top_row = pixels + y * rowstride;
+        guchar *bottom_row = pixels + (height - y - 1) * rowstride;
+
+        memcpy(temp_row, top_row, rowstride);
+        memcpy(top_row, bottom_row, rowstride);
+        memcpy(bottom_row, temp_row, rowstride);
+    }
+
+    // Free the temporary buffer
+    free(temp_row);
+
+    GdkPixbuf *flipped_pixbuf = gdk_pixbuf_copy(pixbuf);
+    gtk_image_set_from_pixbuf(GTK_IMAGE(cp_image), flipped_pixbuf);
+    g_object_unref(flipped_pixbuf);
+}
+
+void on_horizontal_mirror_clicked(GtkWidget *button, GtkImage *image) {
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(cp_image));
+    int width = gdk_pixbuf_get_width(pixbuf);
+    int height = gdk_pixbuf_get_height(pixbuf);
+    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
+    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
+    unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
+
+    // Loop through each row
+    for (int y = 0; y < height; ++y) {
+        // Pointer to the first pixel of the current row
+        unsigned char *row = pixels + y * rowstride;
+
+        // Loop through the first half of the row
+        for (int x = 0; x < width / 2; ++x) {
+            // Compute positions of the pixels to swap
+            unsigned char *left_pixel = row + x * n_channels;  // Left pixel
+            unsigned char *right_pixel = row + (width - 1 - x) * n_channels;  // Corresponding right pixel
+
+            // Swap the color channels (RGB or RGBA) of the left and right pixels
+            for (int channel = 0; channel < n_channels; ++channel) {
+                unsigned char temp = left_pixel[channel];
+                left_pixel[channel] = right_pixel[channel];
+                right_pixel[channel] = temp;
+            }
+        }
+    }
+
+    // Update the image with the flipped pixels
+    GdkPixbuf *flipped_pixbuf = gdk_pixbuf_copy(pixbuf);
+    gtk_image_set_from_pixbuf(GTK_IMAGE(cp_image), flipped_pixbuf);
+    g_object_unref(flipped_pixbuf);
+}
+
 
 // Function to handle the tones button click
 void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry) {
@@ -195,8 +262,8 @@ int main(int argc, char *argv[]) {
     gtk_window_set_position(GTK_WINDOW(work_image_window), GTK_WIN_POS_CENTER);
 
     // Create an image widget and add it to the image window
-    image = gtk_image_new();
-    gtk_container_add(GTK_CONTAINER(image_window), image);
+    original_image = gtk_image_new();
+    gtk_container_add(GTK_CONTAINER(image_window), original_image);
     cp_image = gtk_image_new();
     gtk_container_add(GTK_CONTAINER(work_image_window), cp_image);
 
@@ -210,7 +277,7 @@ int main(int argc, char *argv[]) {
     gtk_widget_show_all(work_image_window);
 
     // Create the control window 
-    create_control_window(GTK_IMAGE(image), GTK_IMAGE(cp_image));
+    create_control_window(GTK_IMAGE(original_image), GTK_IMAGE(cp_image));
 
     // Start the GTK main loop
     gtk_main();
