@@ -25,10 +25,10 @@ void on_grayscale_clicked(GtkWidget *button, GtkWidget *current_image);
 
 // Variable to store the loaded image filename (for saving later)
 char *current_image_path = NULL;
-GtkWidget *original_image, *cp_image;
+GtkWidget *original_image, *working_image;
 
 // Function to create the control window with "Open Image", "Save Image" buttons, and "Tones" input field
-void create_control_window(GtkImage *image, GtkImage *cp_image) {
+void create_control_window(GtkImage *image, GtkImage *working_image) {
     // Create a new window for controls
     GtkWidget *control_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(control_window), "Control Window");
@@ -77,11 +77,11 @@ void create_control_window(GtkImage *image, GtkImage *cp_image) {
 
     // Connect the buttons to their respective functions
     g_signal_connect(open_button, "clicked", G_CALLBACK(open_image), image);
-    g_signal_connect(save_button, "clicked", G_CALLBACK(save_image), cp_image);
+    g_signal_connect(save_button, "clicked", G_CALLBACK(save_image), working_image);
     g_signal_connect(start_restart, "clicked", G_CALLBACK(on_start_restart_clicked), image);
     g_signal_connect(vertical_mirror, "clicked", G_CALLBACK(on_vertical_mirror_clicked), image);
     g_signal_connect(horizontal_mirror, "clicked", G_CALLBACK(on_horizontal_mirror_clicked), image);
-    g_signal_connect(grayscale, "clicked", G_CALLBACK(on_grayscale_clicked), cp_image);
+    g_signal_connect(grayscale, "clicked", G_CALLBACK(on_grayscale_clicked), working_image);
     g_signal_connect(quantize_button, "clicked", G_CALLBACK(on_quantize_button_clicked), GTK_ENTRY(quantize));
 
     // Connect the destroy signal to close the application
@@ -228,17 +228,17 @@ void grayscale(GtkWidget *current_image, int &min, int &max) {
         }
     }
 
-    update_pixbuf(pixbuf, cp_image);
+    update_pixbuf(pixbuf, working_image);
 }
 
 void on_start_restart_clicked(GtkWidget *button, GtkImage *image) {
     GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(original_image));
 
-    update_pixbuf(pixbuf, cp_image);
+    update_pixbuf(pixbuf, working_image);
 }
 
 void on_vertical_mirror_clicked(GtkWidget *button, GtkImage *image) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(cp_image));
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(working_image));
     int width = gdk_pixbuf_get_width(pixbuf);
     int height = gdk_pixbuf_get_height(pixbuf);
     // number of bytes per row in the image data
@@ -260,11 +260,11 @@ void on_vertical_mirror_clicked(GtkWidget *button, GtkImage *image) {
 
     // Free the temporary buffer
     free(temp_row);
-    update_pixbuf(pixbuf, cp_image);
+    update_pixbuf(pixbuf, working_image);
 }
 
 void on_horizontal_mirror_clicked(GtkWidget *button, GtkImage *image) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(cp_image));
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(working_image));
     int width = gdk_pixbuf_get_width(pixbuf);
     int height = gdk_pixbuf_get_height(pixbuf);
     int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
@@ -293,7 +293,7 @@ void on_horizontal_mirror_clicked(GtkWidget *button, GtkImage *image) {
         }
     }
 
-    update_pixbuf(pixbuf, cp_image);
+    update_pixbuf(pixbuf, working_image);
 }
 
 void on_grayscale_clicked(GtkWidget *button, GtkWidget *current_image) {
@@ -322,8 +322,8 @@ void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry) {
         return;
     }
 
-    grayscale(cp_image, min, max);
-    pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(cp_image));
+    grayscale(original_image, min, max);
+    pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(working_image));
     width = gdk_pixbuf_get_width(pixbuf);
     height = gdk_pixbuf_get_height(pixbuf);
     rowstride = gdk_pixbuf_get_rowstride(pixbuf);
@@ -357,7 +357,7 @@ void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry) {
         }
     }
 
-    update_pixbuf(pixbuf, cp_image);
+    update_pixbuf(pixbuf, working_image);
 }
 
 int main(int argc, char *argv[]) {
@@ -371,15 +371,15 @@ int main(int argc, char *argv[]) {
 
     // Create second window for editting
     GtkWidget *work_image_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(work_image_window), "Work Image");
+    gtk_window_set_title(GTK_WINDOW(work_image_window), "Working Image");
     gtk_window_set_default_size(GTK_WINDOW(work_image_window), 400, 300);
     gtk_window_set_position(GTK_WINDOW(work_image_window), GTK_WIN_POS_CENTER);
 
     // Create an image widget and add it to the image window
     original_image = gtk_image_new();
     gtk_container_add(GTK_CONTAINER(image_window), original_image);
-    cp_image = gtk_image_new();
-    gtk_container_add(GTK_CONTAINER(work_image_window), cp_image);
+    working_image = gtk_image_new();
+    gtk_container_add(GTK_CONTAINER(work_image_window), working_image);
 
     // Connect the destroy signal to close the application
     g_signal_connect(image_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
@@ -388,7 +388,7 @@ int main(int argc, char *argv[]) {
     // show windows
     gtk_widget_show_all(image_window);
     gtk_widget_show_all(work_image_window);
-    create_control_window(GTK_IMAGE(original_image), GTK_IMAGE(cp_image));
+    create_control_window(GTK_IMAGE(original_image), GTK_IMAGE(working_image));
 
     gtk_main();
 
