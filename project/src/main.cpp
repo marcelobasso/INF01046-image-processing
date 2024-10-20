@@ -10,40 +10,30 @@
 
 
 void open_image(GtkWidget *button, GtkImage *image);
-
 void save_image(GtkWidget *button, GtkWidget *current_image);
-
 void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry);
-
 void on_start_restart_clicked(GtkWidget *button, GtkImage *image);
-
 void on_vertical_mirror_clicked(GtkWidget *button, GtkImage *image);
-
 void on_horizontal_mirror_clicked(GtkWidget *button, GtkImage *image);
-
 void on_grayscale_clicked(GtkWidget *button, GtkWidget *current_image);
 
-// Variable to store the loaded image filename (for saving later)
+// GLOBALS (fix later because no one likes globals)
 char *current_image_path = NULL;
 GtkWidget *original_image, *working_image;
 
-// Function to create the control window with "Open Image", "Save Image" buttons, and "Tones" input field
+// Function to create the control window 
 void create_control_window(GtkImage *image, GtkImage *working_image) {
-    // Create a new window for controls
     GtkWidget *control_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(control_window), "Control Window");
     gtk_window_set_default_size(GTK_WINDOW(control_window), 200, 100);
     gtk_window_set_position(GTK_WINDOW(control_window), GTK_WIN_POS_CENTER);
 
-    // Create a vertical box container
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_add(GTK_CONTAINER(control_window), vbox);
 
-    // Open Image
     GtkWidget *open_button = gtk_button_new_with_label("Open Image");
     gtk_box_pack_start(GTK_BOX(vbox), open_button, TRUE, TRUE, 3);
 
-    // save the image
     GtkWidget *save_button = gtk_button_new_with_label("Save Image");
     gtk_box_pack_start(GTK_BOX(vbox), save_button, TRUE, TRUE, 0);
 
@@ -51,27 +41,22 @@ void create_control_window(GtkImage *image, GtkImage *working_image) {
     GtkWidget *start_restart = gtk_button_new_with_label("Start/Restart");
     gtk_box_pack_start(GTK_BOX(vbox), start_restart, TRUE, TRUE, 0);
 
-    // Mirror vertical
     GtkWidget *vertical_mirror = gtk_button_new_with_label("Vertical mirror");
     gtk_box_pack_start(GTK_BOX(vbox), vertical_mirror, TRUE, TRUE, 0);
 
-    // Mirror horizontal
     GtkWidget *horizontal_mirror = gtk_button_new_with_label("Horizontal mirror");
     gtk_box_pack_start(GTK_BOX(vbox), horizontal_mirror, TRUE, TRUE, 0);
 
     GtkWidget *grayscale = gtk_button_new_with_label("Grayscale");
     gtk_box_pack_start(GTK_BOX(vbox), grayscale, TRUE, TRUE, 0);
 
-    // Create a horizontal box container for tones input and button
     GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_box_pack_start(GTK_BOX(vbox), hbox, TRUE, TRUE, 0);
 
-    // Create a text field (entry) for quantization
     GtkWidget *quantize = gtk_entry_new();
     gtk_entry_set_placeholder_text(GTK_ENTRY(quantize), "N° of tones");
     gtk_box_pack_start(GTK_BOX(hbox), quantize, TRUE, TRUE, 0);
 
-    // Create a button for submitting n of tones
     GtkWidget *quantize_button = gtk_button_new_with_label("Quantize");
     gtk_box_pack_start(GTK_BOX(hbox), quantize_button, FALSE, FALSE, 0);
 
@@ -144,25 +129,21 @@ gchar* get_filename(gchar *file_path) {
     return filename;
 }
 
-// Function to save the image as JPEG using a file chooser dialog
 void save_image(GtkWidget *button, GtkWidget *current_image) {
     GtkWidget *dialog;
     GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(current_image));
     gchar *new_filename = g_strconcat(get_filename(current_image_path), "_edited.jpg", NULL);
 
-    // Check if there is an image to save
     if (!current_image_path) {
         std::cerr << "No image loaded to save!" << std::endl;
         return;
     }
 
-    // Get the pixbuf from the image widget
     if (!pixbuf) {
         std::cerr << "No image to save!" << std::endl;
         return;
     }
 
-    // Create a file chooser dialog for saving the file
     dialog = gtk_file_chooser_dialog_new("Save Image",
         NULL,
         GTK_FILE_CHOOSER_ACTION_SAVE,
@@ -171,9 +152,8 @@ void save_image(GtkWidget *button, GtkWidget *current_image) {
         NULL);
 
 
-    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), new_filename);
-
     // Select image
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), new_filename);
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         char *save_filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
 
@@ -191,7 +171,6 @@ void save_image(GtkWidget *button, GtkWidget *current_image) {
 }
 
 void update_pixbuf(GdkPixbuf *pixbuf, GtkWidget *current_image) {
-    // Update the image with the flipped pixels
     GdkPixbuf *updated_pixbuf = gdk_pixbuf_copy(pixbuf);
     gtk_image_set_from_pixbuf(GTK_IMAGE(current_image), updated_pixbuf);
     g_object_unref(updated_pixbuf);
@@ -201,7 +180,6 @@ void grayscale(GtkWidget *current_image, int &min, int &max) {
     GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(current_image));
     int width = gdk_pixbuf_get_width(pixbuf);
     int height = gdk_pixbuf_get_height(pixbuf);
-    // n of pixels in a row
     int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
     int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
     unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
@@ -233,7 +211,6 @@ void grayscale(GtkWidget *current_image, int &min, int &max) {
 
 void on_start_restart_clicked(GtkWidget *button, GtkImage *image) {
     GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(original_image));
-
     update_pixbuf(pixbuf, working_image);
 }
 
@@ -312,8 +289,6 @@ void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry) {
     unsigned char *pixel;
     int luminance, min, max, bin_size, new_pixel_value;
 
-    
-    // validate input
     if (!max_tones) {
         std::cerr << "ERROR: Type the number of max tones for quantization" << std::endl;
         return;
