@@ -322,7 +322,7 @@ void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry) {
         return;
     }
 
-    grayscale(original_image, min, max);
+    grayscale(working_image, min, max);
     pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(working_image));
     width = gdk_pixbuf_get_width(pixbuf);
     height = gdk_pixbuf_get_height(pixbuf);
