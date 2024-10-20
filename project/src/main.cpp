@@ -248,20 +248,17 @@ void on_horizontal_mirror_clicked(GtkWidget *button, GtkImage *image) {
     int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
     unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
 
-    std::cout << "number of channels: " << n_channels << std::endl;
-
     // Loop through each row
     for (int y = 0; y < height; ++y) {
         // Pointer to the first pixel of the current row
         unsigned char *row = pixels + y * rowstride;
 
-        // Loop through the first half of the row
         for (int x = 0; x < width / 2; ++x) {
             // Compute positions of the pixels to swap
-            unsigned char *left_pixel = row + x * n_channels;  // Left pixel
+            unsigned char *left_pixel = row + x * n_channels;  
             unsigned char *right_pixel = row + (width - 1 - x) * n_channels;  // Corresponding right pixel
 
-            // Swap the color channels (RGB or RGBA) of the left and right pixels
+            // Swap the color channels 
             for (int channel = 0; channel < n_channels; ++channel) {
                 unsigned char temp = left_pixel[channel];
                 left_pixel[channel] = right_pixel[channel];
@@ -325,6 +322,8 @@ void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry) {
         for (int x = 0; x < width; ++x) {
             pixel = row + x * n_channels; 
             new_pixel_value = (int) ((int)pixel[0] / bin_size) * bin_size + (int)(bin_size / 2);
+            
+            if (new_pixel_value > 254) new_pixel_value = 254;
 
             for (int channel = 0; channel < n_channels; channel++) {
                 pixel[channel] = new_pixel_value;
