@@ -8,7 +8,6 @@
 #define G_WEIGHT 0.587
 #define B_WEIGHT 0.114
 
-
 void open_image(GtkWidget *button, GtkImage *image);
 void save_image(GtkWidget *button, GtkWidget *current_image);
 void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry);
@@ -158,7 +157,7 @@ void save_image(GtkWidget *button, GtkWidget *current_image) {
         char *save_filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
 
         // Save the pixbuf (image) in JPEG format
-        if (!gdk_pixbuf_save(pixbuf, save_filename, "jpeg", NULL, "quality", "100", NULL)) {
+        if (!gdk_pixbuf_save(pixbuf, save_filename, "jpeg", NULL, "quality", "50", NULL)) {
             std::cerr << "Failed to save image!" << std::endl;
         } else {
             std::cout << "Image saved successfully as JPEG to " << save_filename << std::endl;
@@ -221,14 +220,14 @@ void on_vertical_mirror_clicked(GtkWidget *button, GtkImage *image) {
     // number of bytes per row in the image data
     int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
     int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    guchar *pixels = gdk_pixbuf_get_pixels(pixbuf);
+    unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
 
     // Temporary buffer to store a row
-    guchar *temp_row = (guchar *) malloc(rowstride);
+    unsigned char *temp_row = (unsigned char *) malloc(rowstride);
 
     for (int y = 0; y < height / 2; ++y) {
-        guchar *top_row = pixels + y * rowstride;
-        guchar *bottom_row = pixels + (height - y - 1) * rowstride;
+        unsigned char *top_row = pixels + y * rowstride;
+        unsigned char *bottom_row = pixels + (height - y - 1) * rowstride;
 
         memcpy(temp_row, top_row, rowstride);
         memcpy(top_row, bottom_row, rowstride);
@@ -321,7 +320,7 @@ void on_quantize_button_clicked(GtkWidget *button, GtkEntry *entry) {
 
         for (int x = 0; x < width; ++x) {
             pixel = row + x * n_channels; 
-            new_pixel_value = (int) ((int)pixel[0] / bin_size) * bin_size + (int)(bin_size / 2);
+            new_pixel_value = ((int) pixel[0] / bin_size) * bin_size + (int)(bin_size / 2);
             
             if (new_pixel_value > 254) new_pixel_value = 254;
 
