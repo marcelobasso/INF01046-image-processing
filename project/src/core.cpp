@@ -48,11 +48,9 @@ void open_image(GtkWidget *button, Program_instance *program_data) {
             g_free(program_data->current_image_path);
         }
 
-        // Get the selected filename
         GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
         program_data->current_image_path = gtk_file_chooser_get_filename(chooser);
 
-        // Set the image to the selected file
         gtk_image_set_from_file(GTK_IMAGE(program_data->original_image), program_data->current_image_path);
     }
 
@@ -86,12 +84,10 @@ void save_image(GtkWidget *button, Program_instance *program_data) {
         NULL);
 
 
-    // Select image
     gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), new_filename);
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         char *save_filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
 
-        // Save the pixbuf (image) in JPEG format
         if (!gdk_pixbuf_save(pixbuf, save_filename, "jpeg", NULL, "quality", "50", NULL)) {
             std::cerr << "Failed to save image!" << std::endl;
         } else {
@@ -104,98 +100,95 @@ void save_image(GtkWidget *button, Program_instance *program_data) {
     gtk_widget_destroy(dialog);
 }
 
-void update_pixbuf(GdkPixbuf *pixbuf, GtkWidget *current_image) {
+void update_pixbuf(GdkPixbuf *pixbuf, Program_instance *program_data) {
     GdkPixbuf *updated_pixbuf = gdk_pixbuf_copy(pixbuf);
-    gtk_image_set_from_pixbuf(GTK_IMAGE(current_image), updated_pixbuf);
+    gtk_image_set_from_pixbuf(GTK_IMAGE(program_data->working_image), updated_pixbuf);
+    
+    program_data->img_data.pixbuf = updated_pixbuf;
+    program_data->img_data.width = gdk_pixbuf_get_width(updated_pixbuf);
+    program_data->img_data.height = gdk_pixbuf_get_height(updated_pixbuf);
+    program_data->img_data.rowstride = gdk_pixbuf_get_rowstride(updated_pixbuf);
+    program_data->img_data.n_channels = gdk_pixbuf_get_n_channels(updated_pixbuf);
+    program_data->img_data.pixels = gdk_pixbuf_get_pixels(updated_pixbuf);
+
     g_object_unref(updated_pixbuf);
 }
 
-void grayscale(GtkWidget *current_image, int &min, int &max) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(current_image));
-    int width = gdk_pixbuf_get_width(pixbuf);
-    int height = gdk_pixbuf_get_height(pixbuf);
-    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
+void grayscale(Program_instance *program_data) {
+    Image_data *img_data = &program_data->img_data;
     unsigned char *pixel;
     int luminance;
 
-    // for calculating the range of the interval
-    min = INT_MAX; 
-    max = 0;
+    for (int y = 0; y < img_data->height; ++y) {
+        unsigned char *row = img_data->pixels + y * img_data->rowstride;
 
-    for (int y = 0; y < height; ++y) {
-        // Pointer to the first pixel of the current row
-        unsigned char *row = pixels + y * rowstride;
-
-        for (int x = 0; x < width; ++x) {
-            pixel = row + x * n_channels; 
+        for (int x = 0; x < img_data->width; ++x) {
+            pixel = row + x * img_data->n_channels; 
             luminance = pixel[0] * R_WEIGHT + pixel[1] * G_WEIGHT + pixel[2] * B_WEIGHT;
-            if (luminance > max) max = luminance;
-            if (luminance < min) min = luminance;
+            if (luminance > img_data->max) img_data->max = luminance;
+            if (luminance < img_data->min) img_data->min = luminance;
 
-            for (int channel = 0; channel < n_channels; ++channel) {
+            for (int channel = 0; channel < img_data->n_channels; ++channel) {
                 pixel[channel] = luminance;
             }
         }
     }
 
-    update_pixbuf(pixbuf, current_image);
+    update_pixbuf(img_data->pixbuf, program_data);
+}
+
+void on_grayscale_clicked(GtkWidget *button, Program_instance *program_data){
+    grayscale(program_data);
 }
 
 void on_start_restart_clicked(GtkWidget *button, Program_instance *program_data) {
     GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->original_image));
-    update_pixbuf(pixbuf, program_data->working_image);
+    update_pixbuf(pixbuf, program_data);
 
     pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
     GtkWidget *window = gtk_widget_get_toplevel(GTK_WIDGET(program_data->working_image));
     gtk_window_resize(GTK_WINDOW(window), gdk_pixbuf_get_width(pixbuf), gdk_pixbuf_get_height(pixbuf));
+
+    program_data->img_data.pixbuf = pixbuf;
+    program_data->img_data.width = gdk_pixbuf_get_width(pixbuf);
+    program_data->img_data.height = gdk_pixbuf_get_height(pixbuf);
+    program_data->img_data.rowstride = gdk_pixbuf_get_rowstride(pixbuf);
+    program_data->img_data.n_channels = gdk_pixbuf_get_n_channels(pixbuf);
+    program_data->img_data.pixels = gdk_pixbuf_get_pixels(pixbuf);
+    program_data->img_data.min = INT_MAX;
+    program_data->img_data.max = 0;
 }
 
 void on_vertical_mirror_clicked(GtkWidget *button, Program_instance *program_data) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
-    int width = gdk_pixbuf_get_width(pixbuf);
-    int height = gdk_pixbuf_get_height(pixbuf);
-    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
+    Image_data img_data = program_data->img_data;
+    unsigned char *temp_row = (unsigned char *) malloc(img_data.rowstride);
+    
+    for (int y = 0; y < img_data.height / 2; ++y) {
+        unsigned char *top_row = img_data.pixels + y * img_data.rowstride;
+        unsigned char *bottom_row = img_data.pixels + (img_data.height - y - 1) * img_data.rowstride;
 
-    // Temporary buffer to store a row
-    unsigned char *temp_row = (unsigned char *) malloc(rowstride);
-    for (int y = 0; y < height / 2; ++y) {
-        unsigned char *top_row = pixels + y * rowstride;
-        unsigned char *bottom_row = pixels + (height - y - 1) * rowstride;
-
-        memcpy(temp_row, top_row, rowstride);
-        memcpy(top_row, bottom_row, rowstride);
-        memcpy(bottom_row, temp_row, rowstride);
+        memcpy(temp_row, top_row, img_data.rowstride);
+        memcpy(top_row, bottom_row, img_data.rowstride);
+        memcpy(bottom_row, temp_row, img_data.rowstride);
     }
 
-    // Free the temporary buffer
     free(temp_row);
-    update_pixbuf(pixbuf, program_data->working_image);
+    update_pixbuf(img_data.pixbuf, program_data);
 }
 
 void on_horizontal_mirror_clicked(GtkWidget *button, Program_instance *program_data) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
-    int width = gdk_pixbuf_get_width(pixbuf);
-    int height = gdk_pixbuf_get_height(pixbuf);
-    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
+    Image_data img_data = program_data->img_data;
 
     // Loop through each row
-    for (int y = 0; y < height; ++y) {
-        // Pointer to the first pixel of the current row
-        unsigned char *row = pixels + y * rowstride;
+    for (int y = 0; y < img_data.height; ++y) {
+        unsigned char *row = img_data.pixels + y * img_data.rowstride;
 
-        for (int x = 0; x < width / 2; ++x) {
-            // Compute positions of the pixels to swap
-            unsigned char *left_pixel = row + x * n_channels;  
-            unsigned char *right_pixel = row + (width - 1 - x) * n_channels;  // Corresponding right pixel
+        for (int x = 0; x < img_data.width / 2; ++x) {
+            unsigned char *left_pixel = row + x * img_data.n_channels;  
+            unsigned char *right_pixel = row + (img_data.width - 1 - x) * img_data.n_channels;  // Corresponding right pixel
 
             // Swap the color channels 
-            for (int channel = 0; channel < n_channels; ++channel) {
+            for (int channel = 0; channel < img_data.n_channels; ++channel) {
                 unsigned char temp = left_pixel[channel];
                 left_pixel[channel] = right_pixel[channel];
                 right_pixel[channel] = temp;
@@ -203,25 +196,11 @@ void on_horizontal_mirror_clicked(GtkWidget *button, Program_instance *program_d
         }
     }
 
-    update_pixbuf(pixbuf, program_data->working_image);
+    update_pixbuf(img_data.pixbuf, program_data);
 }
-
-void on_grayscale_clicked(GtkWidget *button, Program_instance *program_data) {
-    int min, max;
-    grayscale(program_data->working_image, min, max);
-} 
 
 void on_quantize_button_clicked(GtkWidget *button, Program_instance *program_data) {
     const int max_tones = atoi(gtk_entry_get_text(program_data->quantize_entry));
-    GdkPixbuf *pixbuf;
-    int width;
-    int height;
-    int rowstride;
-    int n_channels;
-    unsigned char *pixels;
-    unsigned char *pixel;
-    int luminance, min, max, bin_size, new_pixel_value;
-
     if (!max_tones) {
         std::cerr << "ERROR: Type the number of max tones for quantization" << std::endl;
         return;
@@ -230,38 +209,35 @@ void on_quantize_button_clicked(GtkWidget *button, Program_instance *program_dat
         return;
     }
 
-    grayscale(program_data->working_image, min, max);
-    pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
-    width = gdk_pixbuf_get_width(pixbuf);
-    height = gdk_pixbuf_get_height(pixbuf);
-    rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    pixels = gdk_pixbuf_get_pixels(pixbuf);
+    grayscale(program_data);
+    Image_data img_data = program_data->img_data;
+    int luminance, bin_size, new_pixel_value;
+    unsigned char *pixel;
 
     // if interval is smaller than n° of tones
-    if (max_tones > max - min) {
+    if (max_tones > img_data.max - img_data.min) {
         std::cout << "Nothing to be done" << std::endl;
         return;
     }
 
-    bin_size = (int) (max - min + 1) / max_tones;
+    bin_size = (int) (img_data.max - img_data.min + 1) / max_tones;
+    std::cout << bin_size << " " << max_tones << " ";
+    for (int y = 0; y < img_data.height; ++y) {
+        unsigned char *row = img_data.pixels + y * img_data.rowstride;
 
-    for (int y = 0; y < height; ++y) {
-        unsigned char *row = pixels + y * rowstride;
-
-        for (int x = 0; x < width; ++x) {
-            pixel = row + x * n_channels; 
+        for (int x = 0; x < img_data.width; ++x) {
+            pixel = row + x * img_data.n_channels; 
             new_pixel_value = ((int) pixel[0] / bin_size) * bin_size + (int)(bin_size / 2);
             
             if (new_pixel_value > 254) new_pixel_value = 254;
 
-            for (int channel = 0; channel < n_channels; channel++) {
+            for (int channel = 0; channel < img_data.n_channels; channel++) {
                 pixel[channel] = new_pixel_value;
             }
         }
     }
 
-    update_pixbuf(pixbuf, program_data->working_image);
+    update_pixbuf(img_data.pixbuf, program_data);
 }
 
 void calculate_histogram(GdkPixbuf *pixbuf, int *histogram) {
@@ -270,7 +246,6 @@ void calculate_histogram(GdkPixbuf *pixbuf, int *histogram) {
     int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
     int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
     unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
-    unsigned char *pixel;
     
     for (int i = 0; i < 256; ++i) {
         histogram[i] = 0;
@@ -279,7 +254,7 @@ void calculate_histogram(GdkPixbuf *pixbuf, int *histogram) {
     for (int y = 0; y < height; ++y) {
         unsigned char *row = pixels + y * rowstride;
         for (int x = 0; x < width; ++x) {
-            pixel = row + x * n_channels;
+            auto pixel = row + x * n_channels;
             int luminance = pixel[0];  // Assuming grayscale or processed grayscale
             histogram[luminance]++;
         }
@@ -342,6 +317,10 @@ static gboolean draw_histogram(GtkWidget *widget, cairo_t *cr, int *histogram) {
     return FALSE;
 }
 
+void close_window(GtkWidget *widget, gpointer data) {
+    gtk_widget_destroy(widget);
+}
+
 void on_histogram_clicked(GtkWidget *button, Program_instance *program_data) {
     GdkPixbuf *pixbuf;
     int histogram[256], min, max;
@@ -351,7 +330,7 @@ void on_histogram_clicked(GtkWidget *button, Program_instance *program_data) {
         return;
     }
 
-    grayscale(program_data->working_image, min, max);
+    grayscale(program_data);
     pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
     calculate_histogram(pixbuf, histogram);
 
@@ -369,21 +348,16 @@ void on_histogram_clicked(GtkWidget *button, Program_instance *program_data) {
     GtkWidget *drawing_area = gtk_drawing_area_new();
     gtk_container_add(GTK_CONTAINER(histogram_window), drawing_area);
     g_signal_connect(drawing_area, "draw", G_CALLBACK(draw_histogram), histogram);
-    g_signal_connect(histogram_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    g_signal_connect(histogram_window, "destroy", G_CALLBACK(close_window), NULL);
 
     gtk_widget_show_all(histogram_window);
 }
 
 void on_brightness_button_clicked(GtkWidget *button, Program_instance *program_data) {
     const int enhancement = atoi(gtk_entry_get_text(program_data->brightness_entry));
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
-    int width = gdk_pixbuf_get_width(pixbuf);
-    int height = gdk_pixbuf_get_height(pixbuf);
-    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
+    Image_data img_data = program_data->img_data;
+    int new_pixel_value;
     unsigned char *pixel;
-    int luminance, min, max, new_pixel_value;
 
     if (!enhancement) {
         std::cerr << "ERROR: Type a number to enhance brightness" << std::endl;
@@ -393,11 +367,11 @@ void on_brightness_button_clicked(GtkWidget *button, Program_instance *program_d
         return;
     }
 
-    for (int y = 0; y < height; ++y) {
-        unsigned char *row = pixels + y * rowstride;
-        for (int x = 0; x < width; ++x) {
-            for (int channel = 0; channel < n_channels; channel++) {
-                pixel = row + x * n_channels;
+    for (int y = 0; y < img_data.height; ++y) {
+        unsigned char *row = img_data.pixels + y * img_data.rowstride;
+        for (int x = 0; x < img_data.width; ++x) {
+            for (int channel = 0; channel < img_data.n_channels; channel++) {
+                pixel = row + x * img_data.n_channels;
                 new_pixel_value = pixel[channel] + enhancement;
                 sanitize_pixel(new_pixel_value);
                 pixel[channel] = new_pixel_value;
@@ -405,20 +379,15 @@ void on_brightness_button_clicked(GtkWidget *button, Program_instance *program_d
         }
     }
 
-    update_pixbuf(pixbuf, program_data->working_image);
+    update_pixbuf(img_data.pixbuf, program_data);
 }
 
 void on_contrast_button_clicked(GtkWidget *button, Program_instance *program_data) {
     const gchar *value = gtk_entry_get_text(program_data->contrast_entry);
     const float enhancement = std::stof(value);
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
-    int width = gdk_pixbuf_get_width(pixbuf);
-    int height = gdk_pixbuf_get_height(pixbuf);
-    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
+    Image_data img_data = program_data->img_data;
+    int new_pixel_value;
     unsigned char *pixel;
-    int luminance, min, max, new_pixel_value;
 
     if (!enhancement) {
         std::cerr << "ERROR: Type a number to enhance contrast" << std::endl;
@@ -428,43 +397,36 @@ void on_contrast_button_clicked(GtkWidget *button, Program_instance *program_dat
         return;
     }
 
-    for (int y = 0; y < height; ++y) {
-        unsigned char *row = pixels + y * rowstride;
-        for (int x = 0; x < width; ++x) {
-            for (int channel = 0; channel < n_channels; channel++) {
-                pixel = row + x * n_channels;
-                new_pixel_value = (int) pixel[channel] * enhancement;
+    for (int y = 0; y < img_data.height; ++y) {
+        unsigned char *row = img_data.pixels + y * img_data.rowstride;
+        for (int x = 0; x < img_data.width; ++x) {
+            for (int channel = 0; channel < img_data.n_channels; channel++) {
+                pixel = row + x * img_data.n_channels;
+                new_pixel_value = pixel[channel] * enhancement;
                 sanitize_pixel(new_pixel_value);
                 pixel[channel] = new_pixel_value;
             }
         }
     }
 
-    update_pixbuf(pixbuf, program_data->working_image);
+    update_pixbuf(img_data.pixbuf, program_data);
 }
 
 void on_negative_button_clicked(GtkWidget *button, Program_instance *program_data) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
-    int width = gdk_pixbuf_get_width(pixbuf);
-    int height = gdk_pixbuf_get_height(pixbuf);
-    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
+    Image_data img_data = program_data->img_data;
     unsigned char *pixel;
-    int luminance, min, max, new_pixel_value;
 
-    for (int y = 0; y < height; ++y) {
-        unsigned char *row = pixels + y * rowstride;
-        for (int x = 0; x < width; ++x) {
-            for (int channel = 0; channel < n_channels; channel++) {
-                pixel = row + x * n_channels;
-                new_pixel_value = 255 - pixel[channel];
-                pixel[channel] = new_pixel_value;
+    for (int y = 0; y < img_data.height; ++y) {
+        unsigned char *row = img_data.pixels + y * img_data.rowstride;
+        for (int x = 0; x < img_data.width; ++x) {
+            for (int channel = 0; channel < img_data.n_channels; channel++) {
+                pixel = row + x * img_data.n_channels;
+                pixel[channel] = 255 - pixel[channel];
             }
         }
     }
 
-    update_pixbuf(pixbuf, program_data->working_image);
+    update_pixbuf(img_data.pixbuf, program_data);
 }
 
 
@@ -478,10 +440,12 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     // Create buttons
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_add(GTK_CONTAINER(control_window), vbox);
+    gtk_widget_set_margin_start(vbox, 5);
+    gtk_widget_set_margin_end(vbox, 5);
     
     // Label for the first section
-    GtkWidget *label1 = gtk_label_new("Basic Operations");
-    gtk_box_pack_start(GTK_BOX(vbox), label1, FALSE, FALSE, 10);
+    GtkWidget *label_operations = gtk_label_new("Basic Operations");
+    gtk_box_pack_start(GTK_BOX(vbox), label_operations, FALSE, FALSE, 10);
 
     GtkWidget *open_button = gtk_button_new_with_label("Open Image");
     gtk_box_pack_start(GTK_BOX(vbox), open_button, TRUE, TRUE, 3);
@@ -491,6 +455,10 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
 
     GtkWidget *start_restart = gtk_button_new_with_label("Start/Restart");
     gtk_box_pack_start(GTK_BOX(vbox), start_restart, TRUE, TRUE, 0);
+
+    // Label for the first section
+    GtkWidget *label_editting = gtk_label_new("Editting");
+    gtk_box_pack_start(GTK_BOX(vbox), label_editting, FALSE, FALSE, 10);
 
     GtkWidget *vertical_mirror = gtk_button_new_with_label("Vertical mirror");
     gtk_box_pack_start(GTK_BOX(vbox), vertical_mirror, TRUE, TRUE, 0);
@@ -514,18 +482,18 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
 
     // ---------------------------------------------------------------------------
     // Separator for visual division
-    GtkWidget *separator1 = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-    gtk_box_pack_start(GTK_BOX(controls_vbox), separator1, FALSE, TRUE, 5);
+    // GtkWidget *separator1 = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+    // gtk_box_pack_start(GTK_BOX(controls_vbox), separator1, FALSE, TRUE, 5);
 
     // Label for the second section
-    GtkWidget *label2 = gtk_label_new("Adjustments");
-    gtk_box_pack_start(GTK_BOX(controls_vbox), label2, FALSE, FALSE, 10);
+    GtkWidget *label_adjustments = gtk_label_new("Adjustments");
+    gtk_box_pack_start(GTK_BOX(controls_vbox), label_adjustments, FALSE, FALSE, 10);
 
     // Create a horizontal box for the quantize entry and its button
     GtkWidget *quantize_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_box_pack_start(GTK_BOX(controls_vbox), quantize_hbox, TRUE, TRUE, 0);
 
-    GtkWidget *quantize = gtk_entry_new();
+    auto quantize = gtk_entry_new();
     gtk_entry_set_placeholder_text(GTK_ENTRY(quantize), "N° of tones");
     gtk_entry_set_width_chars(GTK_ENTRY(quantize), 15);
     gtk_widget_set_halign(quantize, GTK_ALIGN_START);  // Align left to prevent expanding

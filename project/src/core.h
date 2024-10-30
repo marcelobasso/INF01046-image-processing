@@ -12,15 +12,17 @@
 #define INITIAL_WIDTH 200
 #define INITIAL_HEIGHT 100
 
-typedef struct img_data {
-    int width, height, rowstride, n_channels;
+typedef struct {
+    int width, height, rowstride, n_channels, min = INT_MAX, max = 0;
     unsigned char *pixels;
+    GdkPixbuf *pixbuf;
 } Image_data;
 
-typedef struct program_instance {
+typedef struct {
     char *current_image_path = NULL;
     GtkWidget *original_image, *working_image, *image_window, *work_image_window;
     GtkEntry *quantize_entry, *brightness_entry, *contrast_entry;
+    Image_data img_data;
 } Program_instance;
 
 
