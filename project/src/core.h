@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <iostream>
 #include <string>   
+#include <cstring>
+#include <math.h>
 #include <vector>
 #include <algorithm>
 #include <gtk/gtk.h>
@@ -14,6 +16,7 @@
 
 typedef struct {
     int width, height, rowstride, n_channels, min = INT_MAX, max = 0;
+    float histogram[256] = {0}, max_histogram = 0;
     unsigned char *pixels;
     GdkPixbuf *pixbuf;
 } Image_data;

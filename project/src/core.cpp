@@ -22,6 +22,7 @@ gchar* get_filename(gchar *file_path) {
     return filename;
 }
 
+// Defines interval of [0..255] to pixel accepted values
 void sanitize_pixel(int &pixel) {
     if (pixel > 255) pixel = 255;
     if (pixel < 0) pixel = 0;
@@ -201,6 +202,11 @@ void on_horizontal_mirror_clicked(GtkWidget *button, Program_instance *program_d
 
 void on_quantize_button_clicked(GtkWidget *button, Program_instance *program_data) {
     const int max_tones = atoi(gtk_entry_get_text(program_data->quantize_entry));
+    grayscale(program_data);
+    Image_data img_data = program_data->img_data;
+    int luminance, bin_size, new_pixel_value;
+    unsigned char *pixel;
+    
     if (!max_tones) {
         std::cerr << "ERROR: Type the number of max tones for quantization" << std::endl;
         return;
@@ -208,11 +214,6 @@ void on_quantize_button_clicked(GtkWidget *button, Program_instance *program_dat
         std::cerr << "ERROR: The range accepted is [0..255]" << std::endl;
         return;
     }
-
-    grayscale(program_data);
-    Image_data img_data = program_data->img_data;
-    int luminance, bin_size, new_pixel_value;
-    unsigned char *pixel;
 
     // if interval is smaller than n° of tones
     if (max_tones > img_data.max - img_data.min) {
@@ -240,58 +241,65 @@ void on_quantize_button_clicked(GtkWidget *button, Program_instance *program_dat
     update_pixbuf(img_data.pixbuf, program_data);
 }
 
-void calculate_histogram(GdkPixbuf *pixbuf, int *histogram) {
-    int width = gdk_pixbuf_get_width(pixbuf);
-    int height = gdk_pixbuf_get_height(pixbuf);
-    int rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    unsigned char *pixels = gdk_pixbuf_get_pixels(pixbuf);
-    
-    for (int i = 0; i < 256; ++i) {
-        histogram[i] = 0;
+void calculate_histogram(Program_instance *program_data) {
+    Image_data *img_data = &program_data->img_data;
+    int n_of_pixels = img_data->width * img_data->height;
+    int index;
+    unsigned char *row, *pixel;
+
+    std::memset(img_data->histogram, 0, sizeof(img_data->histogram));
+    img_data->max_histogram = 0;
+
+    // accumulates pixels
+    for (int y = 0; y < img_data->height; ++y) {
+        row = img_data->pixels + y * img_data->rowstride;
+        for (int x = 0; x < img_data->width; ++x) {
+            pixel = row + x * img_data->n_channels;
+            index = pixel[0];
+            img_data->histogram[index] += 1; // Assuming grayscale or processed grayscale
+        }
     }
 
-    for (int y = 0; y < height; ++y) {
-        unsigned char *row = pixels + y * rowstride;
-        for (int x = 0; x < width; ++x) {
-            auto pixel = row + x * n_channels;
-            int luminance = pixel[0];  // Assuming grayscale or processed grayscale
-            histogram[luminance]++;
+    // calculate frequencies
+    for (int i = 0; i < 256; i++) {
+        img_data->histogram[i] /= n_of_pixels;
+        if (img_data->histogram[i] > img_data->max_histogram){
+            img_data->max_histogram = img_data->histogram[i];
         }
     }
 }
 
-static gboolean draw_histogram(GtkWidget *widget, cairo_t *cr, int *histogram) {
+static gboolean draw_histogram(GtkWidget *widget, cairo_t *cr, Image_data *img_data) {
     int width = gtk_widget_get_allocated_width(widget);
     int height = gtk_widget_get_allocated_height(widget);
     int array_size = 256;
 
     // Calculate max value in the array to scale y-axis
-    int max_value = *std::max_element(histogram, histogram + array_size);
-    if (max_value == 0) max_value = 1;  // Avoid division by zero
+    float max_value = img_data->max_histogram;
+    // if (max_value == 0) max_value = 1;  // Avoid division by zero
 
     // Dimensions and scaling factors
-    float bar_width = (float) width / array_size; // Width for each bar
-    float y_scale = static_cast<float>(height - 40) / max_value;   // Height scale based on max frequency
+    float bar_width = width / array_size; // Width for each bar
+    float y_scale = ((float) height - 64) / max_value;   // Height scale based on max frequency
 
     // Draw y-axis and x-axis
     cairo_set_source_rgb(cr, 255, 255, 255);
-    cairo_set_line_width(cr, 4.0);
+    cairo_set_line_width(cr, 2.0);
 
     // Y-axis
-    cairo_move_to(cr, 40, 10);  // start of y-axis
-    cairo_line_to(cr, 40, height - 30); // end of y-axis
+    cairo_move_to(cr, 39, 10);  // start of y-axis
+    cairo_line_to(cr, 39, height - 30); // end of y-axis
     cairo_stroke(cr);
 
     // X-axis
-    cairo_move_to(cr, 40, height - 30);
+    cairo_move_to(cr, 39, height - 30);
     cairo_line_to(cr, width - 10, height - 30);
     cairo_stroke(cr);
 
     // Draw histogram bars
     cairo_set_source_rgb(cr, 0.2, 0.5, 0.8);
     for (int i = 0; i < array_size; i++) {
-        int bar_height = histogram[i] * y_scale;
+        int bar_height = img_data->histogram[i] * y_scale;
         cairo_rectangle(cr, 40 + i * bar_width, height - 30 - bar_height, bar_width, bar_height);
         cairo_fill(cr);
     }
@@ -299,8 +307,8 @@ static gboolean draw_histogram(GtkWidget *widget, cairo_t *cr, int *histogram) {
     // Draw x-axis labels (1 to 256)
     cairo_set_source_rgb(cr, 255, 255, 255);
     cairo_set_font_size(cr, 8);
-    for (int i = 0; i <= 256; i += 64) { // Interval for x-axis labels
-        std::string label = std::to_string(i + 1);
+    for (int i = 0; i < 256; i += 15) { // Interval for x-axis labels
+        std::string label = std::to_string(i);
         cairo_move_to(cr, 40 + i * bar_width, height - 15);
         cairo_show_text(cr, label.c_str());
     }
@@ -322,32 +330,23 @@ void close_window(GtkWidget *widget, gpointer data) {
 }
 
 void on_histogram_clicked(GtkWidget *button, Program_instance *program_data) {
-    GdkPixbuf *pixbuf;
-    int histogram[256], min, max;
-
-    if (!pixbuf) {
+    Image_data *img_data = &program_data->img_data;
+    
+    if (!img_data->pixbuf) {
         std::cerr << "No image loaded!" << std::endl;
         return;
     }
-
     grayscale(program_data);
-    pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
-    calculate_histogram(pixbuf, histogram);
+    calculate_histogram(program_data);
 
     GtkWidget *histogram_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(histogram_window), "Image Histogram");
-    gtk_window_set_default_size(GTK_WINDOW(histogram_window), 800, 600);
-
-    for (int i = 0; i < 256; ++i) {
-        if (histogram[i] > 0) {
-            std::cout << "Tone " << i << ": " << histogram[i] << std::endl;
-        }
-    }
+    gtk_window_set_default_size(GTK_WINDOW(histogram_window), 1000, 600);
 
     // Create a drawing area
     GtkWidget *drawing_area = gtk_drawing_area_new();
     gtk_container_add(GTK_CONTAINER(histogram_window), drawing_area);
-    g_signal_connect(drawing_area, "draw", G_CALLBACK(draw_histogram), histogram);
+    g_signal_connect(drawing_area, "draw", G_CALLBACK(draw_histogram), img_data);
     g_signal_connect(histogram_window, "destroy", G_CALLBACK(close_window), NULL);
 
     gtk_widget_show_all(histogram_window);
