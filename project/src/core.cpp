@@ -276,7 +276,6 @@ static gboolean draw_histogram(GtkWidget *widget, cairo_t *cr, Image_data *img_d
 
     // Calculate max value in the array to scale y-axis
     float max_value = img_data->max_histogram;
-    // if (max_value == 0) max_value = 1;  // Avoid division by zero
 
     // Dimensions and scaling factors
     float bar_width = width / array_size; // Width for each bar
@@ -287,12 +286,12 @@ static gboolean draw_histogram(GtkWidget *widget, cairo_t *cr, Image_data *img_d
     cairo_set_line_width(cr, 2.0);
 
     // Y-axis
-    cairo_move_to(cr, 39, 10);  // start of y-axis
-    cairo_line_to(cr, 39, height - 30); // end of y-axis
+    cairo_move_to(cr, 70, 30);  // start of y-axis
+    cairo_line_to(cr, 70, height - 30); // end of y-axis
     cairo_stroke(cr);
 
     // X-axis
-    cairo_move_to(cr, 39, height - 30);
+    cairo_move_to(cr, 70, height - 30);
     cairo_line_to(cr, width - 10, height - 30);
     cairo_stroke(cr);
 
@@ -300,25 +299,25 @@ static gboolean draw_histogram(GtkWidget *widget, cairo_t *cr, Image_data *img_d
     cairo_set_source_rgb(cr, 0.2, 0.5, 0.8);
     for (int i = 0; i < array_size; i++) {
         int bar_height = img_data->histogram[i] * y_scale;
-        cairo_rectangle(cr, 40 + i * bar_width, height - 30 - bar_height, bar_width, bar_height);
+        cairo_rectangle(cr, 70 + i * bar_width, height - 30 - bar_height, bar_width, bar_height);
         cairo_fill(cr);
     }
 
     // Draw x-axis labels (1 to 256)
     cairo_set_source_rgb(cr, 255, 255, 255);
-    cairo_set_font_size(cr, 8);
+    cairo_set_font_size(cr, 10);
     for (int i = 0; i < 256; i += 15) { // Interval for x-axis labels
         std::string label = std::to_string(i);
-        cairo_move_to(cr, 40 + i * bar_width, height - 15);
+        cairo_move_to(cr, 70 + i * bar_width, height - 15);
         cairo_show_text(cr, label.c_str());
     }
 
     // Draw y-axis labels (proportions)
-    int y_intervals = 5;
+    int y_intervals = 3;
     for (int i = 0; i <= y_intervals; i++) {
-        int proportion = (max_value * i) / y_intervals;
-        std::string label = std::to_string(proportion);
-        cairo_move_to(cr, 10, height - 30 - i * (height - 40) / y_intervals);
+        float proportion = (max_value * i) / y_intervals;
+        std::string label = std::to_string(proportion).substr(0, 7);
+        cairo_move_to(cr, 10, height - 30 - i * (height - 64) / y_intervals);
         cairo_show_text(cr, label.c_str());
     }
 

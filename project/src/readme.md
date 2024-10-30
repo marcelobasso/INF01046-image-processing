@@ -35,7 +35,7 @@ b) Conceitos fundamentais como convolução e filtragem no domínio espacial.
     (8 bits por pixel). Caso a imagem informada como entrada seja colorida, converta-a para tons de cinza
     (luminância) e então calcule seu histograma. Exiba o histograma em uma janela separada,
     onde cada coluna da imagem representa um tom de cinza. Normalize a altura das colunas
-    para obter uma representação apropriada.
+    para obter uma representação apropriada. OK
 
 2) (15 pontos) Ajustar o brilho de uma imagem (e exibí-la), somando ao valor de cada pixel
     um escalar no intervalo [-255, 255]. Certifique-se que o resultado da operação aplicado a
