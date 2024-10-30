@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
-#include <string>
+#include <string>   
+#include <vector>
+#include <algorithm>
 #include <gtk/gtk.h>
 
 #define R_WEIGHT 0.299
@@ -18,7 +20,7 @@ typedef struct img_data {
 typedef struct program_instance {
     char *current_image_path = NULL;
     GtkWidget *original_image, *working_image, *image_window, *work_image_window;
-    GtkEntry *quantize_entry;
+    GtkEntry *quantize_entry, *brightness_entry, *contrast_entry;
 } Program_instance;
 
 

@@ -41,17 +41,17 @@ b) Conceitos fundamentais como convolução e filtragem no domínio espacial.
     um escalar no intervalo [-255, 255]. Certifique-se que o resultado da operação aplicado a
     cada pixel se encontra na faixa [0,255], ajustando-o para zero ou 255 quando necessário. No
     caso de imagens coloridas, aplique o algoritmo para cada um dos canais (R, G, B)
-    independentemente.
+    independentemente. OK
 
 3) (15 pontos) Ajustar o contraste de uma imagem (e exibí-la), multiplicando cada pixel por
     um escalar no intervalo (0, 255]. Certifique-se que o resultado da operação aplicado a cada
     pixel se encontra na faixa [0,255], ajustando-o para 255 quando necessário. No caso de
     imagens coloridas, aplique o algoritmo para cada um dos canais (R, G, B)
-    independentemente. 
+    independentemente. OK
 
 4) (10 pontos) Calcular e exibir o negativo de uma imagem, calculando o novo valor de cada
     pixel como: <novo valor> = 255 - <antigo valor>. No caso de imagens coloridas, aplique o
-    algoritmo para cada um dos canais (R, G, B) independentemente.
+    algoritmo para cada um dos canais (R, G, B) independentemente. OK
 
 5) (25 pontos) Equalizar o histograma de uma imagem, exibindo as imagens antes e depois
     da equalização. Para imagens em tons de cinza, exibir os histogramas antes e depois da
