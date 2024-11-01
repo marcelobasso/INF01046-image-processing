@@ -83,7 +83,7 @@ b) Conceitos fundamentais como convolução e filtragem no domínio espacial.
     (tanto no sentido horário como no sentido antihorário). A operação de rotação deve poder ser aplicada múltiplas vezes de modo a permitir
     obter rotações de +/- 180o
     , +/- 270o
-    , etc.
+    , etc. OK
     
 10) (35 pontos) Implementar um procedimento para realizar convolução entre uma imagem
     e um filtro 3x3 arbitrário. De modo a simplificar sua impementação, ignore as bordas da
