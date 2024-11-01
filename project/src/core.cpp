@@ -164,16 +164,16 @@ void resize_working_window(Program_instance *program_data) {
 }
 
 void update_working_image_data(Program_instance *program_data) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->original_image));
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
     program_data->img_data.pixbuf = pixbuf;
     program_data->img_data.width = gdk_pixbuf_get_width(pixbuf);
     program_data->img_data.height = gdk_pixbuf_get_height(pixbuf);
     program_data->img_data.rowstride = gdk_pixbuf_get_rowstride(pixbuf);
     program_data->img_data.n_channels = gdk_pixbuf_get_n_channels(pixbuf);
     program_data->img_data.pixels = gdk_pixbuf_get_pixels(pixbuf);
+    program_data->img_data.is_grayscale = FALSE;
     program_data->img_data.min = INT_MAX;
     program_data->img_data.max = 0;
-    program_data->img_data.is_grayscale = FALSE;
 }
 
 void on_start_restart_clicked(GtkWidget *button, Program_instance *program_data) {
