@@ -1,38 +1,9 @@
+#ifndef UTILS
+#define UTILS
+#include "utils.h"
+#endif
+
 #include "core.h"
-
-gchar* get_filename(gchar *file_path) {
-    gchar *filename = NULL;
-    gchar **split_array;
-    const gchar *delimiter_path = "/";
-    const gchar *delimiter_name = ".";
-    int length = 0;
-
-    // gets the name of the file with extension
-    split_array = g_strsplit(file_path, delimiter_path, -1);
-    length = g_strv_length(split_array);
-    filename = g_strdup(split_array[length - 1]);
-
-    // removes extension
-    split_array = g_strsplit(filename, delimiter_name, -1);
-    length = g_strv_length(split_array);
-    filename = g_strdup(split_array[0]); 
-
-    g_strfreev(split_array);
-
-    return filename;
-}
-
-// Asserts pixel value on the interval [0..255]
-int sanitize_pixel(int pixel) {
-    if (pixel > 255) pixel = 255;
-    if (pixel < 0) pixel = 0;
-
-    return pixel;
-}
-
-int get_luminance(unsigned char *pixel) {
-    return pixel[0] * R_WEIGHT + pixel[1] * G_WEIGHT + pixel[2] * B_WEIGHT;
-}
 
 void open_image(GtkWidget *button, Program_instance *program_data) {
     GtkWidget *dialog;
@@ -152,30 +123,6 @@ void on_grayscale_clicked(GtkWidget *button, Program_instance *program_data){
     grayscale(program_data);
 }
 
-void resize_working_window(Program_instance *program_data) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
-    GtkWidget *window = gtk_widget_get_toplevel(GTK_WIDGET(program_data->working_image));
-    int new_width, new_height;
-    new_width = gdk_pixbuf_get_width(pixbuf);
-    new_height = gdk_pixbuf_get_height(pixbuf);
-    gtk_window_resize(GTK_WINDOW(window), new_width, new_height);
-    gtk_window_set_default_size(GTK_WINDOW(window), new_width, new_height);
-    gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
-}
-
-void update_working_image_data(Program_instance *program_data) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
-    program_data->img_data.pixbuf = pixbuf;
-    program_data->img_data.width = gdk_pixbuf_get_width(pixbuf);
-    program_data->img_data.height = gdk_pixbuf_get_height(pixbuf);
-    program_data->img_data.rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    program_data->img_data.n_channels = gdk_pixbuf_get_n_channels(pixbuf);
-    program_data->img_data.pixels = gdk_pixbuf_get_pixels(pixbuf);
-    program_data->img_data.is_grayscale = FALSE;
-    program_data->img_data.min = INT_MAX;
-    program_data->img_data.max = 0;
-}
-
 void on_start_restart_clicked(GtkWidget *button, Program_instance *program_data) {
     GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->original_image));
     update_pixbuf(pixbuf, program_data);
@@ -289,61 +236,6 @@ void calculate_histogram(Program_instance *program_data) {
             img_data->max_histogram = img_data->histogram[i];
         }
     }
-}
-
-static gboolean draw_histogram(GtkWidget *widget, cairo_t *cr, Image_data *img_data) {
-    int width = gtk_widget_get_allocated_width(widget);
-    int height = gtk_widget_get_allocated_height(widget);
-    int array_size = 256;
-
-    // Calculate max value in the array to scale y-axis
-    float max_value = img_data->max_histogram;
-
-    // Dimensions and scaling factors
-    float bar_width = width / array_size; // Width for each bar
-    float y_scale = ((float) height - 64) / max_value;   // Height scale based on max frequency
-
-    // Draw y-axis and x-axis
-    cairo_set_source_rgb(cr, 255, 255, 255);
-    cairo_set_line_width(cr, 2.0);
-
-    // Y-axis
-    cairo_move_to(cr, 70, 30);  // start of y-axis
-    cairo_line_to(cr, 70, height - 30); // end of y-axis
-    cairo_stroke(cr);
-
-    // X-axis
-    cairo_move_to(cr, 70, height - 30);
-    cairo_line_to(cr, width - 10, height - 30);
-    cairo_stroke(cr);
-
-    // Draw histogram bars
-    cairo_set_source_rgb(cr, 0.2, 0.5, 0.8);
-    for (int i = 0; i < array_size; i++) {
-        int bar_height = img_data->histogram[i] * y_scale;
-        cairo_rectangle(cr, 70 + i * bar_width, height - 30 - bar_height, bar_width, bar_height);
-        cairo_fill(cr);
-    }
-
-    // Draw x-axis labels (1 to 256)
-    cairo_set_source_rgb(cr, 255, 255, 255);
-    cairo_set_font_size(cr, 10);
-    for (int i = 0; i < 256; i += 15) { // Interval for x-axis labels
-        std::string label = std::to_string(i);
-        cairo_move_to(cr, 70 + i * bar_width, height - 15);
-        cairo_show_text(cr, label.c_str());
-    }
-
-    // Draw y-axis labels (proportions)
-    int y_intervals = 3;
-    for (int i = 0; i <= y_intervals; i++) {
-        float proportion = (max_value * i) / y_intervals;
-        std::string label = std::to_string(proportion).substr(0, 7);
-        cairo_move_to(cr, 10, height - 30 - i * (height - 64) / y_intervals);
-        cairo_show_text(cr, label.c_str());
-    }
-
-    return FALSE;
 }
 
 void close_window(GtkWidget *widget, gpointer data) {
@@ -487,20 +379,6 @@ void on_equalization_clicked(GtkWidget *button, Program_instance *program_data) 
     update_pixbuf(img_data->pixbuf, program_data);
 }
 
-GdkPixbuf *create_pixbuf_from_data(unsigned char *raw_data, int new_width, int new_height) {
-    return gdk_pixbuf_new_from_data(
-        raw_data,               // pixels data
-        GDK_COLORSPACE_RGB,     // color system
-        FALSE,                  // if has alpha (4 channels)
-        8,                      // n of bits per pixel information
-        new_width,  
-        new_height,
-        new_width * 3,
-        NULL,       
-        NULL
-    );
-}
-
 void on_zoom_out_clicked(GtkWidget *button, Program_instance *program_data) {
     const gchar *x_str = gtk_entry_get_text(program_data->zoom_out_x_entry);
     const gchar *y_str = gtk_entry_get_text(program_data->zoom_out_y_entry);
@@ -545,7 +423,6 @@ void on_zoom_out_clicked(GtkWidget *button, Program_instance *program_data) {
     auto new_pixbuf = create_pixbuf_from_data(raw_data, new_width, new_height);
     update_pixbuf(new_pixbuf, program_data);
     resize_working_window(program_data);
-
     delete[] raw_data;
     g_object_unref(new_pixbuf);
 }
@@ -600,6 +477,52 @@ void on_zoom_in_clicked(GtkWidget *button, Program_instance *program_data) {
     g_object_unref(new_pixbuf);
 }
 
+void rotate_image(Program_instance *program_data, int rotation) {
+    Image_data *img_data = &program_data->img_data;
+    int new_width = img_data->height;
+    int new_height = img_data->width;
+    unsigned char *raw_data = new unsigned char[new_width * new_height * 3];
+    unsigned char *pixel, *row;
+    int x_dest, y_dest;
+    std::memset(raw_data, 0, new_width * new_height * 3);
+
+    // Loop through each pixel in the original image and set the corresponding pixels in the rotated image
+    for (int y = 0; y < img_data->height; y++) {
+        row = img_data->pixels + y * img_data->rowstride;
+        for (int x = 0; x < img_data->width; x++) {
+            pixel = row + x * img_data->n_channels;
+
+            if (rotation == ROTATE_RIGHT) {
+                x_dest = img_data->height - 1 - y;
+                y_dest = x;
+            } else {
+                x_dest = y;
+                y_dest = img_data->width - 1 - x;
+            }
+
+            int index = (y_dest * new_width + x_dest) * img_data->n_channels;
+            for (int c = 0; c < img_data->n_channels; c++) {
+                raw_data[index + c] = pixel[c];
+            }
+        }
+    }
+
+    auto new_pixbuf = create_pixbuf_from_data(raw_data, new_width, new_height);
+    update_pixbuf(new_pixbuf, program_data);
+    resize_working_window(program_data);
+
+    delete[] raw_data; // Clean up allocated memory
+    g_object_unref(new_pixbuf);
+}
+
+void on_rotate_r_clicked(GtkWidget *button, Program_instance *program_data) {
+    rotate_image(program_data, ROTATE_RIGHT);
+}
+
+void on_rotate_l_clicked(GtkWidget *button, Program_instance *program_data) {
+    rotate_image(program_data, ROTATE_LEFT);
+}
+
 void create_control_window(GtkImage *original_image, GtkImage *working_image, Program_instance *program_data) {
     GtkWidget *control_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(control_window), "Control Window");
@@ -647,6 +570,13 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     GtkWidget *equalization = gtk_button_new_with_label("Equalization");
     gtk_box_pack_start(GTK_BOX(vbox), equalization, TRUE, TRUE, 0);
 
+    GtkWidget *rotate_r = gtk_button_new_with_label("Rotate 90° right");
+    gtk_box_pack_start(GTK_BOX(vbox), rotate_r, TRUE, TRUE, 0);
+
+    GtkWidget *rotate_l = gtk_button_new_with_label("Rotate 90° left");
+    gtk_box_pack_start(GTK_BOX(vbox), rotate_l, TRUE, TRUE, 0);
+
+    // ------------------------- ADJUSTMENTS --------------------------------
     // Create a vertical box to hold the entries and their buttons
     GtkWidget *controls_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_pack_start(GTK_BOX(vbox), controls_vbox, TRUE, TRUE, 5);
@@ -656,7 +586,6 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     // gtk_box_pack_start(GTK_BOX(controls_vbox), separator1, FALSE, TRUE, 5);
 
     // Label for the second section
-    // ------------------------- ADJUSTMENTS --------------------------------
 
     GtkWidget *label_adjustments = gtk_label_new("Adjustments");
     gtk_box_pack_start(GTK_BOX(controls_vbox), label_adjustments, FALSE, FALSE, 10);
@@ -747,6 +676,9 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     g_signal_connect(negative, "clicked", G_CALLBACK(on_negative_button_clicked), program_data);    
     g_signal_connect(histogram, "clicked", G_CALLBACK(on_histogram_clicked), program_data);
     g_signal_connect(equalization, "clicked", G_CALLBACK(on_equalization_clicked), program_data);
+    g_signal_connect(rotate_r, "clicked", G_CALLBACK(on_rotate_r_clicked), program_data);
+    g_signal_connect(rotate_l, "clicked", G_CALLBACK(on_rotate_l_clicked), program_data);
+
 
     g_signal_connect(quantize_button, "clicked", G_CALLBACK(on_quantize_button_clicked), program_data);
     g_signal_connect(brightness_button, "clicked", G_CALLBACK(on_brightness_button_clicked), program_data);
