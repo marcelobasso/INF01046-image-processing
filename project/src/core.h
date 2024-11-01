@@ -15,7 +15,8 @@
 #define INITIAL_HEIGHT 100
 
 typedef struct {
-    int width, height, rowstride, n_channels, min = INT_MAX, max = 0;
+    int width, height, rowstride, n_channels, min = INT_MAX, max = 0, n_of_pixels;
+    bool is_grayscale = FALSE;
     float histogram[256] = {0}, max_histogram = 0;
     unsigned char *pixels;
     GdkPixbuf *pixbuf;
@@ -25,6 +26,7 @@ typedef struct {
     char *current_image_path = NULL;
     GtkWidget *original_image, *working_image, *image_window, *work_image_window;
     GtkEntry *quantize_entry, *brightness_entry, *contrast_entry;
+    GtkEntry *zoom_out_x_entry, *zoom_out_y_entry;
     Image_data img_data;
 } Program_instance;
 

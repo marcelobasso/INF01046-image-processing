@@ -56,7 +56,7 @@ b) Conceitos fundamentais como convolução e filtragem no domínio espacial.
 5) (25 pontos) Equalizar o histograma de uma imagem, exibindo as imagens antes e depois
     da equalização. Para imagens em tons de cinza, exibir os histogramas antes e depois da
     equalização. No caso de imagens coloridas, para cada um dos canais (R, G, B), utilize o
-    histograma cumulativo obtido a partir da imagem de luminância. 
+    histograma cumulativo obtido a partir da imagem de luminância. OK 
 
 6) (15 pontos) Realizar Histogram Matching de pares de imagens em tons de cinza. 
 
@@ -69,7 +69,7 @@ b) Conceitos fundamentais como convolução e filtragem no domínio espacial.
     sobreponham e que nenhum pixel da imagem deixe de ser coberto. Para cada posição do
     retângulo, calcule as médias (R, G e B) dos pixels sob o retângulo, utilizando estes resultados
     na imagem de saída. Caso o retângulo vá além das dimensões da imagem original, calcule as
-    médias usando apenas os pixels sob o retângulo.
+    médias usando apenas os pixels sob o retângulo. OK
 
 8) (25 pontos) Ampliar a imagem (zoom in) utilizando um fator de 2x2 a cada vez. Visto que
     a imagem será 4 vezes maior que a original, certifique-se de que você alocará memória para
@@ -77,7 +77,7 @@ b) Conceitos fundamentais como convolução e filtragem no domínio espacial.
     passos. Primeiro, insira uma linha e uma coluna em branco entre cada duas linhas e colunas
     originais, respectivamente (veja ilustração na figura a seguir). Após, linearmente interpole os
     valores para preencher os espaços ao longo de todas as linhas (ou colunas) e, finalmente, ao
-    longo de todas as colunas (ou linhas).
+    longo de todas as colunas (ou linhas). OK
 
 9) (15 pontos) Rotacionar imagem de 90o
     (tanto no sentido horário como no sentido antihorário). A operação de rotação deve poder ser aplicada múltiplas vezes de modo a permitir

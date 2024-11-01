@@ -22,10 +22,16 @@ gchar* get_filename(gchar *file_path) {
     return filename;
 }
 
-// Defines interval of [0..255] to pixel accepted values
-void sanitize_pixel(int &pixel) {
+// Asserts pixel value on the interval [0..255]
+int sanitize_pixel(int pixel) {
     if (pixel > 255) pixel = 255;
     if (pixel < 0) pixel = 0;
+
+    return pixel;
+}
+
+int get_luminance(unsigned char *pixel) {
+    return pixel[0] * R_WEIGHT + pixel[1] * G_WEIGHT + pixel[2] * B_WEIGHT;
 }
 
 void open_image(GtkWidget *button, Program_instance *program_data) {
@@ -120,12 +126,15 @@ void grayscale(Program_instance *program_data) {
     unsigned char *pixel;
     int luminance;
 
+    // only apply luminance once
+    if (img_data->is_grayscale) return;
+
     for (int y = 0; y < img_data->height; ++y) {
         unsigned char *row = img_data->pixels + y * img_data->rowstride;
 
         for (int x = 0; x < img_data->width; ++x) {
             pixel = row + x * img_data->n_channels; 
-            luminance = pixel[0] * R_WEIGHT + pixel[1] * G_WEIGHT + pixel[2] * B_WEIGHT;
+            luminance = get_luminance(pixel);
             if (luminance > img_data->max) img_data->max = luminance;
             if (luminance < img_data->min) img_data->min = luminance;
 
@@ -135,6 +144,7 @@ void grayscale(Program_instance *program_data) {
         }
     }
 
+    img_data->is_grayscale = TRUE;
     update_pixbuf(img_data->pixbuf, program_data);
 }
 
@@ -142,14 +152,19 @@ void on_grayscale_clicked(GtkWidget *button, Program_instance *program_data){
     grayscale(program_data);
 }
 
-void on_start_restart_clicked(GtkWidget *button, Program_instance *program_data) {
-    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->original_image));
-    update_pixbuf(pixbuf, program_data);
-
-    pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
+void resize_working_window(Program_instance *program_data) {
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->working_image));
     GtkWidget *window = gtk_widget_get_toplevel(GTK_WIDGET(program_data->working_image));
-    gtk_window_resize(GTK_WINDOW(window), gdk_pixbuf_get_width(pixbuf), gdk_pixbuf_get_height(pixbuf));
+    int new_width, new_height;
+    new_width = gdk_pixbuf_get_width(pixbuf);
+    new_height = gdk_pixbuf_get_height(pixbuf);
+    gtk_window_resize(GTK_WINDOW(window), new_width, new_height);
+    gtk_window_set_default_size(GTK_WINDOW(window), new_width, new_height);
+    gtk_window_set_resizable(GTK_WINDOW(window), FALSE);
+}
 
+void update_working_image_data(Program_instance *program_data) {
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->original_image));
     program_data->img_data.pixbuf = pixbuf;
     program_data->img_data.width = gdk_pixbuf_get_width(pixbuf);
     program_data->img_data.height = gdk_pixbuf_get_height(pixbuf);
@@ -158,6 +173,14 @@ void on_start_restart_clicked(GtkWidget *button, Program_instance *program_data)
     program_data->img_data.pixels = gdk_pixbuf_get_pixels(pixbuf);
     program_data->img_data.min = INT_MAX;
     program_data->img_data.max = 0;
+    program_data->img_data.is_grayscale = FALSE;
+}
+
+void on_start_restart_clicked(GtkWidget *button, Program_instance *program_data) {
+    GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(program_data->original_image));
+    update_pixbuf(pixbuf, program_data);
+    resize_working_window(program_data);
+    update_working_image_data(program_data);
 }
 
 void on_vertical_mirror_clicked(GtkWidget *button, Program_instance *program_data) {
@@ -243,26 +266,25 @@ void on_quantize_button_clicked(GtkWidget *button, Program_instance *program_dat
 
 void calculate_histogram(Program_instance *program_data) {
     Image_data *img_data = &program_data->img_data;
-    int n_of_pixels = img_data->width * img_data->height;
+    img_data->n_of_pixels = img_data->width * img_data->height;
     int index;
     unsigned char *row, *pixel;
-
-    std::memset(img_data->histogram, 0, sizeof(img_data->histogram));
-    img_data->max_histogram = 0;
 
     // accumulates pixels
     for (int y = 0; y < img_data->height; ++y) {
         row = img_data->pixels + y * img_data->rowstride;
         for (int x = 0; x < img_data->width; ++x) {
             pixel = row + x * img_data->n_channels;
-            index = pixel[0];
-            img_data->histogram[index] += 1; // Assuming grayscale or processed grayscale
+
+            // if not grayscale, gets histogram_cum of the pixel luminance value
+            index = img_data->is_grayscale ? pixel[0] : get_luminance(pixel);
+            img_data->histogram[index] += 1;
         }
     }
 
     // calculate frequencies
     for (int i = 0; i < 256; i++) {
-        img_data->histogram[i] /= n_of_pixels;
+        img_data->histogram[i] /= img_data->n_of_pixels;
         if (img_data->histogram[i] > img_data->max_histogram){
             img_data->max_histogram = img_data->histogram[i];
         }
@@ -330,12 +352,17 @@ void close_window(GtkWidget *widget, gpointer data) {
 
 void on_histogram_clicked(GtkWidget *button, Program_instance *program_data) {
     Image_data *img_data = &program_data->img_data;
-    
+    std::memset(img_data->histogram, 0, sizeof(img_data->histogram));
+    img_data->max_histogram = 0;
+
     if (!img_data->pixbuf) {
         std::cerr << "No image loaded!" << std::endl;
         return;
     }
-    grayscale(program_data);
+
+    if (!img_data->is_grayscale) {
+        grayscale(program_data);
+    }
     calculate_histogram(program_data);
 
     GtkWidget *histogram_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -371,8 +398,7 @@ void on_brightness_button_clicked(GtkWidget *button, Program_instance *program_d
             for (int channel = 0; channel < img_data.n_channels; channel++) {
                 pixel = row + x * img_data.n_channels;
                 new_pixel_value = pixel[channel] + enhancement;
-                sanitize_pixel(new_pixel_value);
-                pixel[channel] = new_pixel_value;
+                pixel[channel] = sanitize_pixel(new_pixel_value);
             }
         }
     }
@@ -401,8 +427,7 @@ void on_contrast_button_clicked(GtkWidget *button, Program_instance *program_dat
             for (int channel = 0; channel < img_data.n_channels; channel++) {
                 pixel = row + x * img_data.n_channels;
                 new_pixel_value = pixel[channel] * enhancement;
-                sanitize_pixel(new_pixel_value);
-                pixel[channel] = new_pixel_value;
+                pixel[channel] = sanitize_pixel(new_pixel_value);
             }
         }
     }
@@ -427,8 +452,154 @@ void on_negative_button_clicked(GtkWidget *button, Program_instance *program_dat
     update_pixbuf(img_data.pixbuf, program_data);
 }
 
+void on_equalization_clicked(GtkWidget *button, Program_instance *program_data) {
+    Image_data *img_data = &program_data->img_data;
+    std::memset(img_data->histogram, 0, sizeof(img_data->histogram));
+    img_data->max_histogram = 0;
+    float histogram_cum[256] = {0};
+    unsigned char *row, *pixel;
+    int new_pixel_value;
 
-// Function to create the control window 
+    if (!img_data->pixbuf) {
+        std::cerr << "No image loaded!" << std::endl;
+        return;
+    }
+    calculate_histogram(program_data);
+
+    // computes the (renormalized) cumulative histogram
+    histogram_cum[0] = 256 * img_data->histogram[0];
+    for (int i = 1; i < 256; i++) {
+        histogram_cum[i] = histogram_cum[i - 1] + 256 * img_data->histogram[i];
+    }
+
+    // use renormalized cumulative histogram as equalization function
+    for (int y = 0; y < img_data->height; ++y) {
+        row = img_data->pixels + y * img_data->rowstride;
+        for (int x = 0; x < img_data->width; ++x) {
+            pixel = row + x * img_data->n_channels;
+            for (int c = 0; c < img_data->n_channels; ++c) {
+                new_pixel_value = (int) histogram_cum[pixel[c]];
+                pixel[c] = sanitize_pixel(new_pixel_value);
+            }
+        }
+    }
+
+    update_pixbuf(img_data->pixbuf, program_data);
+}
+
+GdkPixbuf *create_pixbuf_from_data(unsigned char *raw_data, int new_width, int new_height) {
+    return gdk_pixbuf_new_from_data(
+        raw_data,               // pixels data
+        GDK_COLORSPACE_RGB,     // color system
+        FALSE,                  // if has alpha (4 channels)
+        8,                      // n of bits per pixel information
+        new_width,  
+        new_height,
+        new_width * 3,
+        NULL,       
+        NULL
+    );
+}
+
+void on_zoom_out_clicked(GtkWidget *button, Program_instance *program_data) {
+    const gchar *x_str = gtk_entry_get_text(program_data->zoom_out_x_entry);
+    const gchar *y_str = gtk_entry_get_text(program_data->zoom_out_y_entry);
+    Image_data *img_data = &program_data->img_data;
+    int x_rect = std::atoi(x_str), y_rect = std::atoi(y_str);
+    int new_width = (img_data->width + x_rect - 1) / x_rect; 
+    int new_height = (img_data->height + y_rect - 1) / y_rect;
+    unsigned char *raw_data = new unsigned char[new_width * new_height * 3], *row, *pixel;
+    int rect_sum = 0, index;
+
+    if (!x_rect || !y_rect) {
+        std::cerr << "ERROR: Type both the zoom out factors" << std::endl;
+        return;
+    }
+
+    // for every square of given sizes
+    for (int y = 0; y < img_data->height; y += y_rect) {
+        for (int x = 0; x < img_data->width; x += x_rect) {
+            // for every channel
+            for (int c = 0; c < img_data->n_channels; c++) {
+                rect_sum = 0;
+
+                // for every pixel inside the giving square
+                for (int inner_y = 0; inner_y < y_rect && (y + inner_y) < img_data->height; inner_y++) {
+                    for (int inner_x = 0; inner_x < x_rect && (x + inner_x) < img_data->width; inner_x++) {
+                        // gets the correct row inside the rectangle
+                        row = img_data->pixels + (y + inner_y) * img_data->rowstride;
+                        pixel = row + (x + inner_x) * img_data->n_channels;
+                        // sums the pixel value in that channeç
+                        rect_sum += pixel[c];
+                    }
+                }
+
+                // adds the medium of the pixel values inside the rectangle to the
+                // right index on the new image on the respective channel
+                index = ((y / y_rect) * new_width + (x / x_rect)) * 3 + c;
+                raw_data[index] = rect_sum / (x_rect * y_rect);
+            }
+        }
+    }
+
+    auto new_pixbuf = create_pixbuf_from_data(raw_data, new_width, new_height);
+    update_pixbuf(new_pixbuf, program_data);
+    resize_working_window(program_data);
+
+    delete[] raw_data;
+    g_object_unref(new_pixbuf);
+}
+
+void on_zoom_in_clicked(GtkWidget *button, Program_instance *program_data) {
+    Image_data *img_data = &program_data->img_data;
+    int new_width = img_data->width * 2 - 1;
+    int new_height = img_data->height * 2 - 1;
+    unsigned char *raw_data = new unsigned char[new_width * new_height * 3];
+    unsigned char *pixel, *next_pixel, *row, *next_row, *diag_pixel;
+    std::memset(raw_data, 0, new_width * new_height * 3);
+
+    // Loop through each pixel in the original image and set the corresponding pixels in the zoomed image
+    for (int y = 0; y < img_data->height; y++) {
+        row = img_data->pixels + y * img_data->rowstride;
+        for (int x = 0; x < img_data->width; x++) {
+            pixel = row + x * img_data->n_channels;
+            
+            for (int c = 0; c < img_data->n_channels; c++) {
+                int index = ((y * 2) * new_width + (x * 2)) * 3 + c;
+                raw_data[index] = pixel[c];
+
+                // horizontal middle if within bounds
+                if (x < img_data->width - 1) {
+                    next_pixel = row + (x + 1) * img_data->n_channels;
+                    raw_data[index + 3] = (pixel[c] + next_pixel[c]) / 2;
+                }
+
+                // vertical middle if within bounds
+                if (y < img_data->height - 1) {
+                    next_row = img_data->pixels + (y + 1) * img_data->rowstride;
+                    next_pixel = next_row + x * img_data->n_channels;
+                    raw_data[index + new_width * 3] = (pixel[c] + next_pixel[c]) / 2;
+                }
+
+                // FIX: not calculating as described on the assignment!
+                // diagonal pixel if within bounds
+                if (x < img_data->width - 1 && y < img_data->height - 1) {
+                    next_row = img_data->pixels + (y + 1) * img_data->rowstride;
+                    diag_pixel = next_row + (x + 1) * img_data->n_channels;
+                    raw_data[index + new_width * 3 + 3] = (pixel[c] + diag_pixel[c]) / 2;
+                }
+            }
+        }
+    }
+
+    auto new_pixbuf = create_pixbuf_from_data(raw_data, new_width, new_height);
+    update_pixbuf(new_pixbuf, program_data);
+    resize_working_window(program_data);
+
+    delete[] raw_data; // Clean up allocated memory
+    g_object_unref(new_pixbuf);
+}
+
 void create_control_window(GtkImage *original_image, GtkImage *working_image, Program_instance *program_data) {
     GtkWidget *control_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(control_window), "Control Window");
@@ -441,7 +612,7 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     gtk_widget_set_margin_start(vbox, 5);
     gtk_widget_set_margin_end(vbox, 5);
     
-    // Label for the first section
+    // ------------------------- BASIC OPERATIONS --------------------------------
     GtkWidget *label_operations = gtk_label_new("Basic Operations");
     gtk_box_pack_start(GTK_BOX(vbox), label_operations, FALSE, FALSE, 10);
 
@@ -454,7 +625,7 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     GtkWidget *start_restart = gtk_button_new_with_label("Start/Restart");
     gtk_box_pack_start(GTK_BOX(vbox), start_restart, TRUE, TRUE, 0);
 
-    // Label for the first section
+    // ------------------------- EDITTING OPERATIONS --------------------------------
     GtkWidget *label_editting = gtk_label_new("Editting");
     gtk_box_pack_start(GTK_BOX(vbox), label_editting, FALSE, FALSE, 10);
 
@@ -473,20 +644,24 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     GtkWidget *negative = gtk_button_new_with_label("Negative");
     gtk_box_pack_start(GTK_BOX(vbox), negative, TRUE, TRUE, 0);
 
+    GtkWidget *equalization = gtk_button_new_with_label("Equalization");
+    gtk_box_pack_start(GTK_BOX(vbox), equalization, TRUE, TRUE, 0);
 
     // Create a vertical box to hold the entries and their buttons
     GtkWidget *controls_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_pack_start(GTK_BOX(vbox), controls_vbox, TRUE, TRUE, 5);
 
-    // ---------------------------------------------------------------------------
     // Separator for visual division
     // GtkWidget *separator1 = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
     // gtk_box_pack_start(GTK_BOX(controls_vbox), separator1, FALSE, TRUE, 5);
 
     // Label for the second section
+    // ------------------------- ADJUSTMENTS --------------------------------
+
     GtkWidget *label_adjustments = gtk_label_new("Adjustments");
     gtk_box_pack_start(GTK_BOX(controls_vbox), label_adjustments, FALSE, FALSE, 10);
 
+    // ------------------------- QUANTIZE --------------------------------
     // Create a horizontal box for the quantize entry and its button
     GtkWidget *quantize_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_box_pack_start(GTK_BOX(controls_vbox), quantize_hbox, TRUE, TRUE, 0);
@@ -501,6 +676,7 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     GtkWidget *quantize_button = gtk_button_new_with_label("Quantize");
     gtk_box_pack_start(GTK_BOX(quantize_hbox), quantize_button, TRUE, TRUE, 0);
 
+    // ------------------------- BRIGHTNESS --------------------------------
     // Create a horizontal box for the brightness entry and its button
     GtkWidget *brightness_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_box_pack_start(GTK_BOX(controls_vbox), brightness_hbox, TRUE, TRUE, 0);
@@ -515,7 +691,8 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     GtkWidget *brightness_button = gtk_button_new_with_label("Adjust");
     gtk_box_pack_start(GTK_BOX(brightness_hbox), brightness_button, TRUE, TRUE, 0);
 
-    // Contrast
+    // ------------------------- CONTRAST --------------------------------
+    // Create a horizontal box for the Contrast entry and its button
     GtkWidget *contrast_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_box_pack_start(GTK_BOX(controls_vbox), contrast_hbox, TRUE, TRUE, 0);
 
@@ -529,19 +706,54 @@ void create_control_window(GtkImage *original_image, GtkImage *working_image, Pr
     GtkWidget *contrast_button = gtk_button_new_with_label("Adjust");
     gtk_box_pack_start(GTK_BOX(contrast_hbox), contrast_button, TRUE, TRUE, 0);
 
+    // Label for the second section
+    GtkWidget *label_zoom = gtk_label_new("Zoom");
+    gtk_box_pack_start(GTK_BOX(controls_vbox), label_zoom, FALSE, FALSE, 10);
+
+    // ------------------------- ZOOM OUT --------------------------------
+    // Create a horizontal box for the ZOOM OUT entry and its button
+    GtkWidget *zoom_out_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_box_pack_start(GTK_BOX(controls_vbox), zoom_out_hbox, TRUE, TRUE, 0);
+
+    GtkWidget *zoom_out_x = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(zoom_out_x), "x");
+    gtk_entry_set_width_chars(GTK_ENTRY(zoom_out_x), 7);
+    gtk_widget_set_halign(zoom_out_x, GTK_ALIGN_START);  // Align left to prevent expanding
+    gtk_box_pack_start(GTK_BOX(zoom_out_hbox), zoom_out_x, FALSE, FALSE, 0);
+    program_data->zoom_out_x_entry = GTK_ENTRY(zoom_out_x);
+
+    GtkWidget *zoom_out_y = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(zoom_out_y), "y");
+    gtk_entry_set_width_chars(GTK_ENTRY(zoom_out_y), 7);
+    gtk_widget_set_halign(zoom_out_y, GTK_ALIGN_START);  // Align left to prevent expanding
+    gtk_box_pack_start(GTK_BOX(zoom_out_hbox), zoom_out_y, FALSE, FALSE, 0);
+    program_data->zoom_out_y_entry = GTK_ENTRY(zoom_out_y);
+
+    GtkWidget *zoom_out_button = gtk_button_new_with_label("Zoom OUT");
+    gtk_box_pack_start(GTK_BOX(zoom_out_hbox), zoom_out_button, TRUE, TRUE, 0);
+
+    // ------------------------- ZOOM IN --------------------------------
+    GtkWidget *zoom_in_button = gtk_button_new_with_label("Zoom in 2x2");
+    gtk_box_pack_start(GTK_BOX(controls_vbox), zoom_in_button, TRUE, TRUE, 0);
+
     // Connect the buttons to their respective functions
     g_signal_connect(open_button, "clicked", G_CALLBACK(open_image), program_data);
     g_signal_connect(save_button, "clicked", G_CALLBACK(save_image), program_data);
     g_signal_connect(start_restart, "clicked", G_CALLBACK(on_start_restart_clicked), program_data);
+
     g_signal_connect(vertical_mirror, "clicked", G_CALLBACK(on_vertical_mirror_clicked), program_data);
     g_signal_connect(horizontal_mirror, "clicked", G_CALLBACK(on_horizontal_mirror_clicked), program_data);
     g_signal_connect(grayscale, "clicked", G_CALLBACK(on_grayscale_clicked), program_data);
     g_signal_connect(negative, "clicked", G_CALLBACK(on_negative_button_clicked), program_data);    
     g_signal_connect(histogram, "clicked", G_CALLBACK(on_histogram_clicked), program_data);
+    g_signal_connect(equalization, "clicked", G_CALLBACK(on_equalization_clicked), program_data);
 
     g_signal_connect(quantize_button, "clicked", G_CALLBACK(on_quantize_button_clicked), program_data);
     g_signal_connect(brightness_button, "clicked", G_CALLBACK(on_brightness_button_clicked), program_data);
     g_signal_connect(contrast_button, "clicked", G_CALLBACK(on_contrast_button_clicked), program_data);    
+
+    g_signal_connect(zoom_out_button, "clicked", G_CALLBACK(on_zoom_out_clicked), program_data);    
+    g_signal_connect(zoom_in_button, "clicked", G_CALLBACK(on_zoom_in_clicked), program_data);
 
 
     g_signal_connect(control_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
