@@ -523,50 +523,6 @@ void on_rotate_l_clicked(GtkWidget *button, Program_instance *program_data) {
     rotate_image(program_data, ROTATE_LEFT);
 }
 
-// Function to set kernel text when a preset button is clicked
-void set_kernel_text(GtkWidget *button, gpointer data) {
-    const char* kernel_text = (const char*)data;
-    GtkEntry *entry = GTK_ENTRY(g_object_get_data(G_OBJECT(button), "entry"));
-    gtk_entry_set_text(entry, kernel_text);
-}
-
-void extract_kernel_input(Program_instance *program_data, std::vector<std::vector<float>> &kernel) {
-    const gchar *kernel_input = gtk_entry_get_text(program_data->kernel_entry);
-    std::string kernel_str(kernel_input);
-
-    kernel_str.erase(std::remove(kernel_str.begin(), kernel_str.end(), '['), kernel_str.end());
-    kernel_str.erase(std::remove(kernel_str.begin(), kernel_str.end(), ']'), kernel_str.end());
-    std::replace(kernel_str.begin(), kernel_str.end(), ',', ' ');
-
-    std::istringstream stream(kernel_str);
-    float value;
-    int row = 0, col = 0;
-
-    while (stream >> value) {
-        kernel[row][col] = value;
-        col++;
-        if (col == 3) {
-            col = 0;
-            row++;
-        }
-    }
-}
-
-void copy_pixel_data(unsigned char* dest, unsigned char* src) {
-    for (int c = 0; c < 3; c++) {
-        dest[c] = src[c];
-    }
-}
-
-void rotate_kernel_180(std::vector<std::vector<float>> &kernel) {
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            std::swap(kernel[i][j], kernel[2 - i][2 - j]);
-        }
-    }
-}
-
-// Function to handle the "Convolve" button click (for demonstration purposes)
 void on_convolve_clicked(GtkWidget *button, Program_instance *program_data) {
     std::vector<std::vector<float>> kernel(3, std::vector<float>(3));
     Image_data *img_data = &program_data->img_data;

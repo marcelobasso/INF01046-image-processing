@@ -67,3 +67,11 @@ void draw_histogram(GtkWidget *widget, cairo_t *cr, Image_data *img_data);
 /// @param new_height 
 /// @return GdkPixbuf* - a pixbuf constructed from the raw data
 GdkPixbuf *create_pixbuf_from_data(unsigned char *raw_data, int new_width, int new_height);
+
+void set_kernel_text(GtkWidget *button, gpointer data);
+
+void extract_kernel_input(Program_instance *program_data, std::vector<std::vector<float>> &kernel);
+
+void copy_pixel_data(unsigned char* dest, unsigned char* src);
+
+void rotate_kernel_180(std::vector<std::vector<float>> &kernel);
