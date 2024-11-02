@@ -530,15 +530,159 @@ void set_kernel_text(GtkWidget *button, gpointer data) {
     gtk_entry_set_text(entry, kernel_text);
 }
 
+void extract_kernel_input(Program_instance *program_data, std::vector<std::vector<float>> &kernel) {
+    const gchar *kernel_input = gtk_entry_get_text(program_data->kernel_entry);
+    std::string kernel_str(kernel_input);
+
+    kernel_str.erase(std::remove(kernel_str.begin(), kernel_str.end(), '['), kernel_str.end());
+    kernel_str.erase(std::remove(kernel_str.begin(), kernel_str.end(), ']'), kernel_str.end());
+    std::replace(kernel_str.begin(), kernel_str.end(), ',', ' ');
+
+    std::istringstream stream(kernel_str);
+    float value;
+    int row = 0, col = 0;
+
+    while (stream >> value) {
+        kernel[row][col] = value;
+        col++;
+        if (col == 3) {
+            col = 0;
+            row++;
+        }
+    }
+}
+
+void copy_pixel_data(unsigned char* dest, unsigned char* src) {
+    for (int c = 0; c < 3; c++) {
+        dest[c] = src[c];
+    }
+}
+
+void rotate_kernel_180(std::vector<std::vector<float>> &kernel) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            std::swap(kernel[i][j], kernel[2 - i][2 - j]);
+        }
+    }
+}
+
 // Function to handle the "Convolve" button click (for demonstration purposes)
-void on_convolve_clicked(GtkWidget *button, gpointer data) {
-    GtkEntry *entry = GTK_ENTRY(data);
-    const gchar *kernel = gtk_entry_get_text(entry);
-    g_print("Applying convolution with kernel: %s\n", kernel);
+void on_convolve_clicked(GtkWidget *button, Program_instance *program_data) {
+    std::vector<std::vector<float>> kernel(3, std::vector<float>(3));
+    Image_data *img_data = &program_data->img_data;
+    extract_kernel_input(program_data, kernel);
+    rotate_kernel_180(kernel);
+    // creates image with borders extended
+    int ext_height = img_data->height + 2;
+    int ext_width = img_data->width + 2;
+    unsigned char *raw_data_ext = new unsigned char[ext_height * ext_width * 3];
+    // creates image for final convolution result
+    unsigned char *raw_data_conv = new unsigned char[img_data->height * img_data->width * 3];
+    unsigned char *pixel, *row;
+    bool clammping = gtk_toggle_button_get_active(program_data->clampping) && (kernel[1][1] != 0.25 && kernel[1][1] != 8);
+    int new_pixel[3];
+    std::memset(raw_data_ext, 0, ext_height * ext_width * 3);
+    std::memset(raw_data_conv, 0, img_data->height * img_data->width * 3);
+    int index;
+
+    // extends image borders
+    // (hope u are not frightened by waling pointers)
+    for (int y = 0; y < img_data->height; y++) {
+        row = img_data->pixels + y * img_data->rowstride;
+        for (int x = 0; x < img_data->width; x++) {
+            pixel = row + x * img_data->n_channels;
+
+            if (y == 0) {
+                copy_pixel_data(raw_data_ext + (y * ext_width + (x + 1)) * 3, pixel);
+
+                if (x == 0) //corner
+                    copy_pixel_data(raw_data_ext + (y * ext_width + x) * 3, pixel);
+
+                if (x == img_data->width - 1) // corner
+                    copy_pixel_data(raw_data_ext + (y * ext_width + (x + 2)) * 3, pixel);
+            }
+            
+            if (y == img_data->height - 1) {
+                copy_pixel_data(raw_data_ext + ((y + 2)* ext_width + (x + 1)) * 3, pixel);
+
+                if (x == 0) //corner
+                    copy_pixel_data(raw_data_ext + ((y + 2) * ext_width + x) * 3, pixel);
+
+                if (x == img_data->width - 1) // corner
+                    copy_pixel_data(raw_data_ext + ((y + 2)* ext_width + (x + 2)) * 3, pixel);
+            }
+
+            if (x == 0)
+                copy_pixel_data(raw_data_ext + ((y + 1) * ext_width + x) * 3, pixel);
+
+            if (x == img_data->width - 1)
+                copy_pixel_data(raw_data_ext + ((y + 1) * ext_width + (x + 2)) * 3, pixel);
+
+            for (int c = 0; c < 3; c++)
+                copy_pixel_data(raw_data_ext + ((y + 1) * ext_width + (x + 1)) * 3, pixel);
+        }
+    }
+    auto pixbuf_ext = create_pixbuf_from_data(raw_data_ext, ext_width, ext_height);
+    auto pixels_ext = gdk_pixbuf_get_pixels(pixbuf_ext);
+    auto rowstride_ext = gdk_pixbuf_get_rowstride(pixbuf_ext);
+
+    // Apply convolution on the image data
+    for (int y = 1; y < img_data->height; y++) {
+        for (int x = 1; x < img_data->width; x++) {
+            std::fill(new_pixel, new_pixel + 3, 0);
+
+            for (int inner_y = 0; inner_y < 3; inner_y++) {
+                for (int inner_x = 0; inner_x < 3; inner_x++) {
+                    row = pixels_ext + (y + inner_y - 1) * rowstride_ext;  // Adjust for offset
+                    pixel = row + (x + inner_x - 1) * 3;
+
+                    for (int c = 0; c < 3; c++) {
+                        new_pixel[c] += kernel[inner_y][inner_x] * pixel[c];
+                    }
+                }
+            }
+
+            // Calculate the output position
+            index = ((y - 1) * img_data->width + (x - 1)) * 3;
+            for (int c = 0; c < 3; c++) {
+                raw_data_conv[index + c] = sanitize_pixel(new_pixel[c] + (clammping ? 127 : 0));
+            }
+        }
+    }
+
+    auto pixbuf_conv = create_pixbuf_from_data(raw_data_conv, img_data->width, img_data->height);
+
+    update_pixbuf(pixbuf_conv, program_data);
+    resize_working_window(program_data);
+
+    delete[] raw_data_ext; // Clean up allocated memory
+    delete[] raw_data_conv;
+    g_object_unref(pixbuf_ext);
+    g_object_unref(pixbuf_conv);
 }
 
 // Function to open the "Convolution Setup" window
 void on_convolution_clicked(GtkWidget *button, Program_instance *program_data) {
+    const char *kernel_labels[] = {
+        "Gaussian",
+        "Laplacian",
+        "High Pass",
+        "Prewitt Hx",
+        "Prewitt Hy",
+        "Sobel Hx",
+        "Sobel Hy"
+    };
+
+    const char *kernels[] = {
+        "[0.0625 0.125 0.0625, 0.125 0.25 0.125, 0.0625 0.125 0.0625]",
+        "[0 -1 0, -1 4 -1, 0 -1 0]",
+        "[-1 -1 -1, -1 8 -1, -1 -1 -1]",
+        "[-1 0 1, -1 0 1, -1 0 1]",
+        "[-1 -1 -1, 0 0 0, 1 1 1]",
+        "[-1 0 1, -2 0 2, -1 0 1]",
+        "[-1 -2 -1, 0 0 0, 1 2 1]"
+    };
+
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Convolution Setup");
 
@@ -552,36 +696,20 @@ void on_convolution_clicked(GtkWidget *button, Program_instance *program_data) {
 
     // Create the text entry and "Convolve" button horizontally
     GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    GtkWidget *entry = gtk_entry_new();
-    gtk_entry_set_width_chars(GTK_ENTRY(entry), 40);
-    gtk_box_pack_start(GTK_BOX(hbox), entry, TRUE, TRUE, 0);
-
+    GtkWidget *kernel_entry = gtk_entry_new();
+    gtk_entry_set_width_chars(GTK_ENTRY(kernel_entry), 40);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(kernel_entry), "[1 2 3, 4 5 6, 7 8 9]");
+    gtk_box_pack_start(GTK_BOX(hbox), kernel_entry, TRUE, TRUE, 0);
+    program_data->kernel_entry = GTK_ENTRY(kernel_entry);
 
     GtkWidget *convolve_button = gtk_button_new_with_label("Convolve");
     gtk_box_pack_start(GTK_BOX(hbox), convolve_button, FALSE, FALSE, 0);
-    g_signal_connect(convolve_button, "clicked", G_CALLBACK(on_convolve_clicked), entry);
+    g_signal_connect(convolve_button, "clicked", G_CALLBACK(on_convolve_clicked), program_data);
     gtk_box_pack_start(GTK_BOX(vbox), hbox, FALSE, FALSE, 0);
 
-    // Preset buttons for common convolution kernels
-    const char *kernels[] = {
-        "Gaussiano",
-        "Laplaciano",
-        "High Pass",
-        "Prewitt Hx",
-        "Prewitt Hy",
-        "Sobel Hx",
-        "Sobel Hy"
-    };
-
-    const char *kernels_data[] = {
-        "[0.0625 0.125 0.0625, 0.125 0.25 0.125, 0.0625 0.125 0.0625]",
-        "[0 -1 0, -1 4 -1, 0 -1 0]",
-        "[-1 -1 -1, -1 8 -1, -1 -1 -1]",
-        "[-1 0 1, -1 0 1, -1 0 1]",
-        "[-1 -1 -1, 0 0 0, 1 1 1]",
-        "[-1 0 1, -2 0 2, -1 0 1]",
-        "[-1 -2 -1, 0 0 0, 1 2 1]"
-    };
+    GtkWidget *clampping = gtk_check_button_new_with_label("With clampping");
+    gtk_box_pack_start(GTK_BOX(vbox), clampping, FALSE, FALSE, 10);
+    program_data->clampping = GTK_TOGGLE_BUTTON(clampping);
 
     GtkWidget *label_kernels = gtk_label_new("Preset Kernels");
     gtk_label_set_xalign(GTK_LABEL(label_kernels), 0.0);
@@ -590,188 +718,22 @@ void on_convolution_clicked(GtkWidget *button, Program_instance *program_data) {
 
     GtkWidget *preset_hbox;
 
-    for (int i = 0; i < sizeof(kernels) / sizeof(kernels[0]); i++) {
+    for (int i = 0; i < sizeof(kernel_labels) / sizeof(kernel_labels[0]); i++) {
         if (i % 4 == 0) {
             preset_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
             gtk_box_pack_start(GTK_BOX(vbox), preset_hbox, FALSE, FALSE, 0);
         }
 
-        GtkWidget *preset_button = gtk_button_new_with_label(kernels[i]);
+        GtkWidget *preset_button = gtk_button_new_with_label(kernel_labels[i]);
         gtk_widget_set_size_request(preset_button, 100, -1);  // Set fixed width, height -1 keeps default
-        g_object_set_data(G_OBJECT(preset_button), "entry", entry);
-        g_signal_connect(preset_button, "clicked", G_CALLBACK(set_kernel_text), (gpointer) kernels_data[i]);
+        g_object_set_data(G_OBJECT(preset_button), "entry", kernel_entry);
+        g_signal_connect(preset_button, "clicked", G_CALLBACK(set_kernel_text), (gpointer) kernels[i]);
         gtk_box_pack_start(GTK_BOX(preset_hbox), preset_button, TRUE, TRUE, 0);
     }
 
     // Show all widgets
     gtk_widget_show_all(window);
 }
-
-// void create_control_window(GtkImage *original_image, GtkImage *working_image, Program_instance *program_data) {
-//     GtkWidget *control_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-//     gtk_window_set_title(GTK_WINDOW(control_window), "Control Window");
-//     gtk_window_set_default_size(GTK_WINDOW(control_window), INITIAL_WIDTH, INITIAL_HEIGHT);
-//     gtk_window_set_position(GTK_WINDOW(control_window), GTK_WIN_POS_CENTER);
-
-//     // Create buttons
-//     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-//     gtk_container_add(GTK_CONTAINER(control_window), vbox);
-//     gtk_widget_set_margin_start(vbox, 5);
-//     gtk_widget_set_margin_end(vbox, 5);
-    
-//     // ------------------------- BASIC OPERATIONS --------------------------------
-//     GtkWidget *label_operations = gtk_label_new("Basic Operations");
-//     gtk_box_pack_start(GTK_BOX(vbox), label_operations, FALSE, FALSE, 10);
-
-//     GtkWidget *open_button = gtk_button_new_with_label("Open Image");
-//     gtk_box_pack_start(GTK_BOX(vbox), open_button, TRUE, TRUE, 3);
-
-//     GtkWidget *save_button = gtk_button_new_with_label("Save Image");
-//     gtk_box_pack_start(GTK_BOX(vbox), save_button, TRUE, TRUE, 0);
-
-//     GtkWidget *start_restart = gtk_button_new_with_label("Start/Restart");
-//     gtk_box_pack_start(GTK_BOX(vbox), start_restart, TRUE, TRUE, 0);
-
-//     // ------------------------- EDITTING OPERATIONS --------------------------------
-//     GtkWidget *label_editting = gtk_label_new("Editting");
-//     gtk_box_pack_start(GTK_BOX(vbox), label_editting, FALSE, FALSE, 10);
-
-//     GtkWidget *vertical_mirror = gtk_button_new_with_label("Vertical mirror");
-//     gtk_box_pack_start(GTK_BOX(vbox), vertical_mirror, TRUE, TRUE, 0);
-
-//     GtkWidget *horizontal_mirror = gtk_button_new_with_label("Horizontal mirror");
-//     gtk_box_pack_start(GTK_BOX(vbox), horizontal_mirror, TRUE, TRUE, 0);
-
-//     GtkWidget *grayscale = gtk_button_new_with_label("Grayscale");
-//     gtk_box_pack_start(GTK_BOX(vbox), grayscale, TRUE, TRUE, 0);
-
-//     GtkWidget *histogram = gtk_button_new_with_label("Show histogram");
-//     gtk_box_pack_start(GTK_BOX(vbox), histogram, TRUE, TRUE, 0);
-
-//     GtkWidget *negative = gtk_button_new_with_label("Negative");
-//     gtk_box_pack_start(GTK_BOX(vbox), negative, TRUE, TRUE, 0);
-
-//     GtkWidget *equalization = gtk_button_new_with_label("Equalization");
-//     gtk_box_pack_start(GTK_BOX(vbox), equalization, TRUE, TRUE, 0);
-
-//     GtkWidget *rotate_r = gtk_button_new_with_label("Rotate 90° right");
-//     gtk_box_pack_start(GTK_BOX(vbox), rotate_r, TRUE, TRUE, 0);
-
-//     GtkWidget *rotate_l = gtk_button_new_with_label("Rotate 90° left");
-//     gtk_box_pack_start(GTK_BOX(vbox), rotate_l, TRUE, TRUE, 0);
-
-//     GtkWidget *convolution = gtk_button_new_with_label("Convolution");
-//     gtk_box_pack_start(GTK_BOX(vbox), convolution, TRUE, TRUE, 0);
-
-//     // ------------------------- ADJUSTMENTS --------------------------------
-//     // Create a vertical box to hold the entries and their buttons
-//     GtkWidget *controls_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-//     gtk_box_pack_start(GTK_BOX(vbox), controls_vbox, TRUE, TRUE, 5);
-
-//     GtkWidget *label_adjustments = gtk_label_new("Adjustments");
-//     gtk_box_pack_start(GTK_BOX(controls_vbox), label_adjustments, FALSE, FALSE, 10);
-
-//     // ------------------------- QUANTIZE --------------------------------
-//     // Create a horizontal box for the quantize entry and its button
-//     GtkWidget *quantize_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-//     gtk_box_pack_start(GTK_BOX(controls_vbox), quantize_hbox, TRUE, TRUE, 0);
-
-//     auto quantize = gtk_entry_new();
-//     gtk_entry_set_placeholder_text(GTK_ENTRY(quantize), "N° of tones");
-//     gtk_entry_set_width_chars(GTK_ENTRY(quantize), 15);
-//     gtk_widget_set_halign(quantize, GTK_ALIGN_START);  // Align left to prevent expanding
-//     gtk_box_pack_start(GTK_BOX(quantize_hbox), quantize, FALSE, FALSE, 0);
-//     program_data->quantize_entry = GTK_ENTRY(quantize);
-
-//     GtkWidget *quantize_button = gtk_button_new_with_label("Quantize");
-//     gtk_box_pack_start(GTK_BOX(quantize_hbox), quantize_button, TRUE, TRUE, 0);
-
-//     // ------------------------- BRIGHTNESS --------------------------------
-//     // Create a horizontal box for the brightness entry and its button
-//     GtkWidget *brightness_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-//     gtk_box_pack_start(GTK_BOX(controls_vbox), brightness_hbox, TRUE, TRUE, 0);
-
-//     GtkWidget *brightness = gtk_entry_new();
-//     gtk_entry_set_placeholder_text(GTK_ENTRY(brightness), "Brightness");
-//     gtk_entry_set_width_chars(GTK_ENTRY(brightness), 15);
-//     gtk_widget_set_halign(brightness, GTK_ALIGN_START);  // Align left to prevent expanding
-//     gtk_box_pack_start(GTK_BOX(brightness_hbox), brightness, FALSE, FALSE, 0);
-//     program_data->brightness_entry = GTK_ENTRY(brightness);
-
-//     GtkWidget *brightness_button = gtk_button_new_with_label("Adjust");
-//     gtk_box_pack_start(GTK_BOX(brightness_hbox), brightness_button, TRUE, TRUE, 0);
-
-//     // ------------------------- CONTRAST --------------------------------
-//     // Create a horizontal box for the Contrast entry and its button
-//     GtkWidget *contrast_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-//     gtk_box_pack_start(GTK_BOX(controls_vbox), contrast_hbox, TRUE, TRUE, 0);
-
-//     GtkWidget *contrast = gtk_entry_new();
-//     gtk_entry_set_placeholder_text(GTK_ENTRY(contrast), "Contrast");
-//     gtk_entry_set_width_chars(GTK_ENTRY(contrast), 15);
-//     gtk_widget_set_halign(contrast, GTK_ALIGN_START);  // Align left to prevent expanding
-//     gtk_box_pack_start(GTK_BOX(contrast_hbox), contrast, FALSE, FALSE, 0);
-//     program_data->contrast_entry = GTK_ENTRY(contrast);
-
-//     GtkWidget *contrast_button = gtk_button_new_with_label("Adjust");
-//     gtk_box_pack_start(GTK_BOX(contrast_hbox), contrast_button, TRUE, TRUE, 0);
-
-//     // Label for the second section
-//     GtkWidget *label_zoom = gtk_label_new("Zoom");
-//     gtk_box_pack_start(GTK_BOX(controls_vbox), label_zoom, FALSE, FALSE, 10);
-
-//     // ------------------------- ZOOM OUT --------------------------------
-//     // Create a horizontal box for the ZOOM OUT entry and its button
-//     GtkWidget *zoom_out_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-//     gtk_box_pack_start(GTK_BOX(controls_vbox), zoom_out_hbox, TRUE, TRUE, 0);
-
-//     GtkWidget *zoom_out_x = gtk_entry_new();
-//     gtk_entry_set_placeholder_text(GTK_ENTRY(zoom_out_x), "x");
-//     gtk_entry_set_width_chars(GTK_ENTRY(zoom_out_x), 7);
-//     gtk_widget_set_halign(zoom_out_x, GTK_ALIGN_START);  // Align left to prevent expanding
-//     gtk_box_pack_start(GTK_BOX(zoom_out_hbox), zoom_out_x, FALSE, FALSE, 0);
-//     program_data->zoom_out_x_entry = GTK_ENTRY(zoom_out_x);
-
-//     GtkWidget *zoom_out_y = gtk_entry_new();
-//     gtk_entry_set_placeholder_text(GTK_ENTRY(zoom_out_y), "y");
-//     gtk_entry_set_width_chars(GTK_ENTRY(zoom_out_y), 7);
-//     gtk_widget_set_halign(zoom_out_y, GTK_ALIGN_START);  // Align left to prevent expanding
-//     gtk_box_pack_start(GTK_BOX(zoom_out_hbox), zoom_out_y, FALSE, FALSE, 0);
-//     program_data->zoom_out_y_entry = GTK_ENTRY(zoom_out_y);
-
-//     GtkWidget *zoom_out_button = gtk_button_new_with_label("Zoom OUT");
-//     gtk_box_pack_start(GTK_BOX(zoom_out_hbox), zoom_out_button, TRUE, TRUE, 0);
-
-//     // ------------------------- ZOOM IN --------------------------------
-//     GtkWidget *zoom_in_button = gtk_button_new_with_label("Zoom in 2x2");
-//     gtk_box_pack_start(GTK_BOX(controls_vbox), zoom_in_button, TRUE, TRUE, 0);
-
-//     // Connect the buttons to their respective functions
-//     g_signal_connect(open_button, "clicked", G_CALLBACK(open_image), program_data);
-//     g_signal_connect(save_button, "clicked", G_CALLBACK(save_image), program_data);
-//     g_signal_connect(start_restart, "clicked", G_CALLBACK(on_start_restart_clicked), program_data);
-
-//     g_signal_connect(vertical_mirror, "clicked", G_CALLBACK(on_vertical_mirror_clicked), program_data);
-//     g_signal_connect(horizontal_mirror, "clicked", G_CALLBACK(on_horizontal_mirror_clicked), program_data);
-//     g_signal_connect(grayscale, "clicked", G_CALLBACK(on_grayscale_clicked), program_data);
-//     g_signal_connect(negative, "clicked", G_CALLBACK(on_negative_button_clicked), program_data);    
-//     g_signal_connect(histogram, "clicked", G_CALLBACK(on_histogram_clicked), program_data);
-//     g_signal_connect(equalization, "clicked", G_CALLBACK(on_equalization_clicked), program_data);
-//     g_signal_connect(rotate_r, "clicked", G_CALLBACK(on_rotate_r_clicked), program_data);
-//     g_signal_connect(rotate_l, "clicked", G_CALLBACK(on_rotate_l_clicked), program_data);
-//     g_signal_connect(convolution, "clicked", G_CALLBACK(on_convolution_clicked), program_data);
-
-//     g_signal_connect(quantize_button, "clicked", G_CALLBACK(on_quantize_button_clicked), program_data);
-//     g_signal_connect(brightness_button, "clicked", G_CALLBACK(on_brightness_button_clicked), program_data);
-//     g_signal_connect(contrast_button, "clicked", G_CALLBACK(on_contrast_button_clicked), program_data);    
-
-//     g_signal_connect(zoom_out_button, "clicked", G_CALLBACK(on_zoom_out_clicked), program_data);    
-//     g_signal_connect(zoom_in_button, "clicked", G_CALLBACK(on_zoom_in_clicked), program_data);
-
-
-//     g_signal_connect(control_window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-//     gtk_widget_show_all(control_window);
-// }
 
 void create_control_window(GtkImage *original_image, GtkImage *working_image, Program_instance *program_data) {
     GtkWidget *control_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);

@@ -2,7 +2,7 @@ all: main
 
 main: bin/core.o src/main.cpp 
 	@echo "# Compilling main code..."
-	g++ -o bin/main bin/utils.o bin/core.o src/main.cpp `pkg-config --cflags --libs gtk+-3.0`
+	g++ -o photoshop bin/utils.o bin/core.o src/main.cpp `pkg-config --cflags --libs gtk+-3.0`
 
 bin/core.o: bin/utils.o src/core.h src/core.cpp
 	@echo "# Compilling core functions..."
@@ -14,3 +14,4 @@ bin/utils.o: src/utils.h src/utils.cpp
 
 clean:
 	rm bin/*
+	rm photoshop

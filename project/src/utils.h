@@ -6,6 +6,7 @@
 #include <math.h>
 #include <vector>
 #include <algorithm>
+#include <sstream>
 #include <gtk/gtk.h>
 
 #define R_WEIGHT 0.299
@@ -26,7 +27,8 @@ typedef struct {
     char *current_image_path = NULL;
     GtkWidget *original_image, *working_image, *image_window, *work_image_window;
     GtkEntry *quantize_entry, *brightness_entry, *contrast_entry;
-    GtkEntry *zoom_out_x_entry, *zoom_out_y_entry;
+    GtkEntry *zoom_out_x_entry, *zoom_out_y_entry, *kernel_entry;
+    GtkToggleButton *clampping;
     Image_data img_data;
 } Program_instance;
 
@@ -56,7 +58,7 @@ void update_working_image_data(Program_instance *program_data);
 /// @brief draws the histogram using GTK and cairo functions
 /// @param widget 
 /// @param cr 
-/// @param img_data 
+/// @param img_data;
 void draw_histogram(GtkWidget *widget, cairo_t *cr, Image_data *img_data);
 
 /// @brief given raw pixel data, creates a new pixbuf instance
