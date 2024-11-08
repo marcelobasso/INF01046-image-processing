@@ -33,6 +33,5 @@ int main(int argc, char *argv[]) {
     create_control_window(GTK_IMAGE(program_data.original_image), GTK_IMAGE(program_data.working_image), &program_data);
 
     gtk_main();
-
     return 0;
 }

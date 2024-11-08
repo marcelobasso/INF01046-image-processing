@@ -26,7 +26,9 @@
             "/usr/include/dbus-1.0",
             "/usr/lib/x86_64-linux-gnu/dbus-1.0/include",
             "/usr/local/include",
-            "/usr/include"
+            "/usr/include",
+            "/usr/local/include/opencv4",
+            "/usr/local/lib64"
         ],
         "defines": [],
         "compilerPath": "/usr/bin/g++",
@@ -38,7 +40,7 @@
           "-Wextra",
           "-mtune=native",
           "-no-pie",
-          "`pkg-config --libs --cflags gtk+-3.0`",
+          "`pkg-config --libs --cflags gtk+-3.0 opencv`",
           "-lm"
         ]
       }
