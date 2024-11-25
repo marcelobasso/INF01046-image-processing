@@ -18,10 +18,6 @@ Trackbar para definir o tamanho do kernel Gaussiano.
 5) (20 pontos) Utilize o comando convertTo para realizar ajuste de brilho, ajuste de contraste, e
 obter o negativo do video.
 
-A esta altura, você já deve encontrar-se minimamente familiarizado com a documentação de
-OpenCV. Para os ítens abaixo, identifique os comandos que serão necessários para a realização
-das operações solicitadas e aplique-os ao vídeo, como feito nos ítens (2) a (5).
-
 6) (10 pontos) Conversão de cores (RGB) para tons de cinza (grayscale).
 
 7) (20 pontos) Redimensionamento do vídeo para a metade do número de píxels em cada
@@ -31,6 +27,17 @@ uma de suas dimensões.
 
 9) (20 pontos) Espelhamento do vídeo (horizontal e vertical).
 
-10) (30 pontos) Gravação de vídeo, levando em conta todos os efeitos acima, exceto Rotação
-e Redimentsionamento, visto que estas operações alteram as dimensões originais do frame,
+10)  (30 pontos) Gravação de vídeo, levando em conta todos os efeitos acima, exceto Rotação e Redimentsionamento, visto que estas operações alteram as dimensões originais do frame,
 o que tenderia a ocasionar um erro durante a tentativa de gravação. 
+
+### Tasks
+1. Configurar Ambiente - OK
+2. Borramento Gaussiano - OK
+3. Canny - OK
+4. Sobel - OK
+5. Brilho, contraste e negativo - OK
+6. Grayscale - OK
+7. Zoom_out - OK
+8. Rotacao - OK
+9. Espelhamento (V e H) - OK
+10. Gravacao - OK

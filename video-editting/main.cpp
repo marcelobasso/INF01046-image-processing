@@ -1,151 +1,242 @@
 #include <opencv2/opencv.hpp>
-#include <stdio.h>
+#include <iostream>
 #include <string>
 #include <vector>
 #include <map>
+#include <cmath>
 
 using namespace std;
 using namespace cv;
-
-map<int, char> key_values = {
-    {27, 'E'}, // escape
-    {73, 'G'}, // grayscale
-    {103, 'G'},
-    {66, 'B'},  // blur
-    {98, 'B'},     
-    {67, 'C'}, // canny
-    {99, 'C'}, 
-    {83, 'S'}, // sobel  
-    {115, 'S'}, 
-    {90, 'Z'}, // zoom_out
-    {122, 'Z'}, 
-    {88, 'R'}, // rotation
-    {120, 'R'}, 
-    {72, 'H'}, // mirror_h
-    {104, 'H'}, 
-    {86, 'V'}, // mirror_v
-    {118, 'V'}, 
-    {65, 'B'}, // brightness
-    {97, 'B'}, 
-    {79, 'O'}, // contrast
-    {111, 'O'}, 
-    {78, 'N'}, // negative
-    {110, 'N'},
-    {32, ' '} // restart
-};
-
-#define MAX_SLIDER 50
+#define MAX_SLIDER 100
 #define SRC "Source Window"
 #define DST "Destiny Window"
 
+typedef map<char, pair<bool, float>> OperationMap;
+
+// Globals
 int slider_val = 0;
+int last_pressed = -1;
+
+// Key-Value Mapping
+const map<int, char> key_values = {
+    {27, 'E'}, {71, 'G'}, {103, 'G'}, {66, 'B'}, {98, 'B'}, {67, 'C'}, {99, 'C'}, 
+    {83, 'S'}, {115, 'S'}, {90, 'Z'}, {122, 'Z'}, {82, 'R'}, {114, 'R'}, {72, 'H'}, 
+    {104, 'H'}, {86, 'V'}, {118, 'V'}, {73, 'I'}, {105, 'I'}, {79, 'O'}, {111, 'O'}, 
+    {78, 'N'}, {110, 'N'}, {32, ' '}, {84, 'T'}, {116, 'T'} // restart
+};
+
+// Slider Callback
 void onSliderChange(int value, void*) {
     slider_val = value;
 }
 
-// set option in case something is clicked
-int setOption(map<char, pair<bool, float>> &options, int key) {
-    // Check if the key exists in key_values
-    if (key_values.find(key) != key_values.end()) {
-        char optionKey = key_values.at(key); // Get corresponding option key ('G', 'B', etc.)
-        
-        // Update the options map
-        if (key_values.at(key) == ' ') {
-            for (map<char, pair<bool, float>>::iterator it = options.begin(); it != options.end(); ++it) {
-                options[it->first] = make_pair(false, 0);
-            }
-        } else if (options.find(optionKey) != options.end()) {
-            options[optionKey] = make_pair(true, slider_val);
-        }
+// Reset all operation flags and values
+void resetOperations(OperationMap &operations) {
+    for (auto &op : operations) {
+        op.second = make_pair(false, 0);
     }
-
-    return key;
+    operations['R'].second = -1; // Correction factor
 }
 
-void runOptions(map<char, pair<bool, float>> &options, int slider, int last_pressed, Mat &src, Mat &dst) {
-    int ksize;
-    Mat src_gray, detected_edges;
-    int lowThreshold = 150;
-    const int maxThreshold = 200;
-    const int ratio = 3;
+// Resizes the output window for zoom operations
+void applyZoom(OperationMap &operations) {
+    float scale = pow(2, operations['Z'].second);
+    resizeWindow(DST, 600 / scale, 500 / scale);
+}
 
-    if (options['G'].first) {
+void printOptions() {
+    cout << "Options:" << endl;
+    cout << "  G: Convert to Grayscale" << endl;
+    cout << "  B: Apply Gaussian Blur" << endl;
+    cout << "  C: Apply Canny Edge Detection" << endl;
+    cout << "  S: Apply Sobel Operator" << endl;
+    cout << "  Z: Zoom Out by 2x" << endl;
+    cout << "  R: Rotate Image" << endl;
+    cout << "  H: Flip Horizontally" << endl;
+    cout << "  V: Flip Vertically" << endl;
+    cout << "  I: Increase Brightness" << endl;
+    cout << "  O: Change Contrast" << endl;
+    cout << "  N: Negative Image" << endl;
+    cout << "  T: Record Video" << endl;
+    cout << "  Space: Reset" << endl;
+}
+
+// Set operations based on user input
+void handleKeyInput(OperationMap &operations, int key) {
+    if (key_values.find(key) != key_values.end()) {
+        char optionKey = key_values.at(key);
+
+        switch (optionKey) {
+            case ' ':
+                resetOperations(operations);
+                resizeWindow(DST, 600, 500); // Reset window size
+                break;
+            case 'Z':
+                operations['Z'].first = true;
+                operations['Z'].second += 1;
+                applyZoom(operations);
+                break;
+            case 'R':
+                operations['R'].first = true;
+                operations['R'].second += 1;
+                break;
+            case 'T':
+                operations[optionKey].first = !operations[optionKey].first;
+                operations['T'].second += 1;
+                if (operations[optionKey].first)
+                    cout << "Recording video..." << endl;
+                else
+                    cout << "Video saved!" << endl;
+                break;
+            default:
+                operations[optionKey].first = !operations[optionKey].first;
+                operations[optionKey].second = slider_val;
+        }
+    }
+}
+
+// Runs the enabled operations
+void processImage(OperationMap &operations, int slider, Mat &src, Mat &dst, VideoWriter &video) {
+    float aux;
+    int ksize;
+    Mat src_gray, detected_edges, grad_x, grad_y, abs_grad_x, abs_grad_y;
+
+    if (operations['G'].first || operations['S'].first) {
         cvtColor(dst, dst, COLOR_BGR2GRAY);
     }
 
-    if (options['B'].first) {
+    if (operations['B'].first) {
+        ksize = (operations['B'].second * 2) + 1; // guarantees odd values only
         if (key_values.at(last_pressed) == 'B') {
             ksize = (slider * 2) + 1; // guarantees odd values only
-            options['B'].second = slider;
-        } else {
-            ksize = (options['B'].second * 2) + 1; // guarantees odd values only
+            operations['B'].second = slider;
         }
 
         GaussianBlur(dst, dst, Size(ksize, ksize), 0);
     }
 
-    if (options['C'].first) {
+    if (operations['C'].first) {
+        ksize = (operations['C'].second * 2) + 1;
         if (key_values.at(last_pressed) == 'C') {
             ksize = (slider * 2) + 1;
-            options['C'].second = slider;
-        } else {
-            ksize = (options['C'].second * 2) + 1;
+            operations['C'].second = slider;
         }
 
-        cvtColor(dst, src_gray, cv::COLOR_BGR2GRAY);  // Convert to grayscale
+        cvtColor(dst, src_gray, COLOR_BGR2GRAY);
         GaussianBlur(src_gray, detected_edges, Size(ksize, ksize), 0);
-        Canny(detected_edges, detected_edges, lowThreshold, lowThreshold * ratio, 5);
+        Canny(detected_edges, detected_edges, 150, 450, 5);
         dst = cv::Scalar::all(0);
         src_gray.copyTo(dst, detected_edges);
     }
-} 
 
-int main(int argc, char** argv) {
-    int camera = 0;
-    VideoCapture cap;
+    if (operations['S'].first) {
+        ksize = operations['S'].second;
+        if (key_values.at(last_pressed) == 'S') {
+            ksize = (slider * 2) + 1;
+            ksize = ksize > 30 ? 31 : ksize;
+            operations['S'].second = ksize;
+        }
 
-    map<char, pair<bool, float>> options = {
-        {'G', make_pair(false, 0)}, // grayscale
-        {'B', make_pair(false, 0)}, // blur     
-        {'C', make_pair(false, 0)}, // canny
-        {'S', make_pair(false, 0)}, // sobel  
-        {'Z', make_pair(false, 0)}, // zoom_out
-        {'R', make_pair(false, 0)}, // rotation
-        {'H', make_pair(false, 0)}, // mirror_h
-        {'V', make_pair(false, 0)}, // mirror_v
-        {'B', make_pair(false, 0)}, // brightness
-        {'O', make_pair(false, 0)}, // contrast
-        {'N', make_pair(false, 0)}  // negative
-    };
-    std::vector<char> keys;
-    int last_pressed, set_result;
-
-    // creates array with all the options
-    for (map<char, pair<bool, float>>::iterator it = options.begin(); it != options.end(); ++it) {
-        keys.push_back(it->first);
+        GaussianBlur(dst, src_gray, Size(ksize, ksize), 0);
+        Sobel(src_gray, grad_x, CV_64F, 1, 0, ksize, 1, 0, BORDER_DEFAULT);
+        Sobel(src_gray, grad_y, CV_64F, 0, 1, ksize, 1, 0, BORDER_DEFAULT);
+        convertScaleAbs(grad_x, abs_grad_x);
+        convertScaleAbs(grad_y, abs_grad_y);
+        addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, dst);
     }
 
-    if (!cap.open(camera)) return 0;
-    while (last_pressed != 27) {
+    if (operations['I'].first) {
+        aux = operations['I'].second;
+        if (key_values.at(last_pressed) == 'I')
+            aux = operations['I'].second = slider;
+        dst.convertTo(dst, -1, 1, slider);
+    }
+
+    if (operations['O'].first) {
+        aux = operations['O'].second;
+        if (key_values.at(last_pressed) == 'O')
+            aux = operations['O'].second = 1 + (slider / 50.0f);
+        dst.convertTo(dst, -1, aux, 0);
+    }
+
+    if (operations['N'].first) {
+        dst = Scalar::all(255) - dst;
+    }
+
+    if (operations['H'].first) {
+        flip(dst, dst, 1); // Horizontal flip
+    }
+
+    if (operations['V'].first) {
+        flip(dst, dst, 0); // Vertical flip
+    }
+
+    if (operations['R'].first) {
+        if ((int) operations['R'].second % 4 != 3) {
+            rotate(dst, dst, (int) operations['R'].second % 4);
+        }
+    }
+
+    if (operations['T'].first) {
+        video.write(dst);
+    } else if (operations['T'].second > 0) {
+        video.release();
+    }
+}
+
+// Main Function
+int main(int argc, char** argv) {
+    int camera = 0;
+    
+    // Define the codec and create VideoWriter object.The output is stored in 'outcpp.avi' file.
+    VideoCapture cap(camera);
+    if (!cap.isOpened()) {
+        cerr << "Error: Unable to open the camera.\n";
+        return -1;
+    }
+    // Default resolutions of the frame are obtained.The default resolutions are system dependent.
+    int frame_width = cap.get(CAP_PROP_FRAME_WIDTH);
+    int frame_height = cap.get(CAP_PROP_FRAME_HEIGHT);
+    double fps = cap.get(CAP_PROP_FPS);
+    VideoWriter video("output_video.avi", VideoWriter::fourcc('M','J','P','G'), fps, Size(frame_width,frame_height));
+
+    if (!video.isOpened()) {
+        cerr << "Error: VideoWriter failed to initialize." << endl;
+        return -1;
+    }
+
+    // Operation Map Initialization
+    OperationMap operations = {
+        {'G', {false, 0}}, {'B', {false, 0}}, {'C', {false, 0}}, {'S', {false, 0}}, 
+        {'Z', {false, 0}}, {'R', {false, -1}}, {'H', {false, 0}}, {'V', {false, 0}}, 
+        {'I', {false, 0}}, {'O', {false, 0}}, {'N', {false, 0}}, {'T', {false, 0}}
+    };
+
+    // UI Initialization
+    namedWindow(SRC, WINDOW_GUI_NORMAL);
+    namedWindow(DST, WINDOW_GUI_NORMAL);
+    createTrackbar("Input", DST, nullptr, MAX_SLIDER, onSliderChange);
+    printOptions(); 
+    resizeWindow(DST, 600, 500);
+
+    while (last_pressed != 27) { // Escape key to exit
         Mat frame, editing_frame;
         cap >> frame;
-        cap >> editing_frame;
+        if (frame.empty()) break; // End of video stream
+        frame.copyTo(editing_frame);
 
-        namedWindow(SRC, WINDOW_GUI_NORMAL);
-        namedWindow(DST, WINDOW_GUI_NORMAL);
-        resizeWindow(DST, 600, 500);
-        createTrackbar("Input", DST, nullptr, MAX_SLIDER, onSliderChange);
-        if (frame.empty()) break; // end of video stream
+        int key = waitKey(1);
+        if (key > 0 && key_values.find(key) != key_values.end()) {
+            last_pressed = key;
+        }
 
-        set_result = setOption(options, waitKey(1));
-        last_pressed = set_result > 0 ? set_result : last_pressed;
-        runOptions(options, slider_val, last_pressed, frame, editing_frame);
+        handleKeyInput(operations, key);
+        processImage(operations, slider_val, frame, editing_frame, video);
 
         imshow(SRC, frame);
         imshow(DST, editing_frame);
     }
 
-    cap.release(); // release the VideoCapture object
-
+    cap.release();
     return 0;
 }
