@@ -32,10 +32,12 @@ void onSliderChange(int value, void*) {
 
 // Reset all operation flags and values
 void resetOperations(OperationMap &operations) {
+    bool recording = operations['T'].first;
     for (auto &op : operations) {
         op.second = make_pair(false, 0);
     }
     operations['R'].second = -1; // Correction factor
+    operations['T'].first = recording;
 }
 
 // Resizes the output window for zoom operations
@@ -178,6 +180,9 @@ void processImage(OperationMap &operations, int slider, Mat &src, Mat &dst, Vide
     }
 
     if (operations['T'].first) {
+        if (dst.channels() == 1) {
+            cvtColor(dst, dst, COLOR_GRAY2BGR);
+        }
         video.write(dst);
     } else if (operations['T'].second > 0) {
         video.release();
