@@ -4,7 +4,7 @@
 #include <vector>
 #include <map>
 #include <cmath>
-
+ 
 using namespace std;
 using namespace cv;
 #define MAX_SLIDER 100

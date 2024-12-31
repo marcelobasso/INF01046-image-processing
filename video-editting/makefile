@@ -1,4 +1,4 @@
 all: main
 
-main: main.cpp
-	g++ -O2 -o main main.cpp `pkg-config --cflags --libs opencv`
+main: src/main.cpp
+	g++ -O2 -o main src/main.cpp `pkg-config --cflags --libs opencv`
