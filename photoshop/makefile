@@ -14,9 +14,10 @@ $(BIN_PATH)/core.o: $(BIN_PATH)/utils.o $(SRC_PATH)/core.h $(SRC_PATH)/core.cpp
 	g++ -o $(BIN_PATH)/core.o -c $(FLAGS) $(SRC_PATH)/core.cpp $(GTK_PKG)
 
 $(BIN_PATH)/utils.o: $(SRC_PATH)/utils.h $(SRC_PATH)/utils.cpp
+	mkdir $(BIN_PATH)
 	@echo "# Compilling utils..."
 	g++ -o $(BIN_PATH)/utils.o -c $(FLAGS) $(SRC_PATH)/utils.cpp $(GTK_PKG)
 
 clean:
-	rm $(BIN_PATH)/*
+	rm -rf $(BIN_PATH)
 	rm photoshop
