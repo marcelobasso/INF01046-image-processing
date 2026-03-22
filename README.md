@@ -13,3 +13,16 @@ Install the required dependencies using `pacman`:
 ```bash
 sudo pacman -S gtk3 opencv pkgconf cmake
 ```
+
+To run `photoshop`
+
+```bash
+cd photoshop
+make run
+```
+
+To run `video-editting`
+```bash
+cd video-editting
+make run
+```
